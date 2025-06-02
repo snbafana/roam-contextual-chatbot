@@ -3,6 +3,7 @@
 A FastAPI-based chatbot that integrates with OpenAI's GPT-4o-mini model to provide contextual responses about game attributes, modifications, and UI configurations.
 
 # FYI:
+- No audio demo -> https://vimeo.com/1089885814?share=copy#t=0
 - I am currently streaming the chat back dynamically and passing the json as a code block in that message. I implemented a version where the json is passed directly, but this does not work with streaming, as one cannot pass the json and stream a message at the same time. 
 - The attributes in the Unity editor are not validated / verified, they are just the variables initially found. This will need to be change. For example, I pass the `category + "." + attr_name + "." + variable_name` to the Unity json editor, which may not be the exact attribute. 
 - The current search system to find inital attributes can take some time to complete, so I am currently working on optimizations here. This is because, for each input, I am dynamically generating 3 keywords for the search, and then deciding which of the results is the most important. However, this can also be solved with the right optimizations. 
