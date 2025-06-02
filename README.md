@@ -44,7 +44,7 @@ source .venv/bin/activate  # Linux/Mac
 
 3. Install dependencies (choose one method):
 ```bash
-# Method 1: Install from pyproject.toml (recommended)
+# Method 1: Install from pyproject.toml
 uv pip install -e .
 
 # Method 2: Install from requirements.txt
@@ -69,7 +69,7 @@ source .venv/bin/activate  # Linux/Mac
 
 3. Install dependencies (choose one method):
 ```bash
-# Method 1: Install from pyproject.toml (recommended)
+# Method 1: Install from pyproject.toml
 pip install -e .
 
 # Method 2: Install from requirements.txt
@@ -85,7 +85,8 @@ OPENAI_API_KEY=your_api_key_here
 
 1. Start the FastAPI server:
 ```bash
-uv run uvicorn main:app --reload
+uv run uvicorn main:app --reload (uv)
+uvicorn main:app --reload (pip/venv)
 ```
 
 2. The API will be available at `http://localhost:8000`
