@@ -329,7 +329,7 @@ async def edit_attribute(attribute_name: str, category: str, variable_name: str,
         return {
             "action_type": "modify",
             "category": category_mapped,
-            "parameters": {variable_name: final_value}, #need to change this to variable name and defining attribute
+            "parameters": {category + "." + attr_name + "." + variable_name: final_value}, #need to change this to variable name and defining attribute
             "confidence": round(confidence, 2)
         }
         
@@ -584,7 +584,7 @@ TOOL_SCHEMAS = {
 # Updated template prompt for the AI agent
 TEMPLATE_PROMPT = """
 You are an intelligent game modification assistant that helps users modify game parameters through natural language commands. Before you take any action, or provide the user with any information about actions they can take,
-use the tools to populate your relevant knowlege. If you do not know something, simply use tools
+use the tools to populate your relevant knowlege. If you do not know something, simply use tools. ONLY MAKE ONE TOOL CALL AT A TIME.
 
 ## Available Tools:
 

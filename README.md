@@ -1,168 +1,224 @@
 # Roam Contextual Chatbot
 
-A contextual chatbot application built with FastAPI backend and Gradio frontend, integrated with OpenAI's GPT-4o-mini model.
+A FastAPI-based chatbot that integrates with OpenAI's GPT-4o-mini model to provide contextual responses about game attributes, modifications, and UI configurations.
+
+# FYI:
+- I am currently streaming the chat back dynamically and passing the json as a code block in that message. I implemented a version where the json is passed directly, but this does not work with streaming, as one cannot pass the json and stream a message at the same time. 
+- The attributes in the Unity editor are not validated / verified, they are just the variables initially found. This will need to be change. For example, I pass the `category + "." + attr_name + "." + variable_name` to the Unity json editor, which may not be the exact attribute. 
+- The current search system to find inital attributes can take some time to complete, so I am currently working on optimizations here. This is because, for each input, I am dynamically generating 3 keywords for the search, and then deciding which of ALL the results is the most important. 
 
 ## Features
 
-### FastAPI Backend (`main.py`)
-- **Create Chat Sessions**: Generate unique chat IDs for separate conversations
-- **Send Messages**: Send messages to specific chats with GPT-4o-mini integration
-- **Chat History**: Maintain conversation context across messages
-- **Chat Management**: List, view history, and delete chat sessions
-- **RESTful API**: Well-documented endpoints with automatic OpenAPI documentation
+- Real-time chat with GPT-4o-mini model
+- Tool-based interactions for:
+  - Finding game attributes
+  - Editing game parameters
+  - Creating UI configurations
+- Streaming responses for better user experience
+- Chat history management
+- Logging system for debugging
 
-### Gradio Client (`client.py`)
-- **User-Friendly Interface**: Clean chat interface for testing the API
-- **Real-time Communication**: Direct integration with FastAPI backend
-- **Chat Controls**: Create, delete, and manage multiple chat sessions
-- **Status Monitoring**: Real-time connection and chat status updates
+## Prerequisites
 
-## Setup Instructions
+- python
+- OpenAI API key
+- FastAPI and Uvicorn for the web server
+- uv package manager
 
-### 1. Install Dependencies
+## Installation
+
+1. Clone the repository:
 ```bash
-pip install -r requirements.txt
+git clone https://github.com/yourusername/roam-contextual-chatbot.git
+cd roam-contextual-chatbot
 ```
 
-### 2. Set OpenAI API Key
-Set your OpenAI API key as an environment variable:
-
-**Windows (PowerShell):**
-```powershell
-$env:OPENAI_API_KEY="your-openai-api-key-here"
-```
-
-**Windows (Command Prompt):**
-```cmd
-set OPENAI_API_KEY=your-openai-api-key-here
-```
-
-**macOS/Linux:**
+2. Create and activate a virtual environment using uv:
 ```bash
-export OPENAI_API_KEY="your-openai-api-key-here"
+uv venv
+source .venv/bin/activate  # Linux/Mac
+# or
+.venv\Scripts\activate     # Windows
 ```
 
-### 3. Run the Applications
-
-#### Start the FastAPI Backend
+3. Install dependencies from the lock file:
 ```bash
-python main.py
+uv pip sync
 ```
-The API will be available at: `http://localhost:8000`
 
-#### Start the Gradio Client (in a separate terminal)
-```bash
-python client.py
+4. Create a `.env` file in the root directory and add your OpenAI API key:
 ```
-The client interface will be available at: `http://localhost:7860`
+OPENAI_API_KEY=your_api_key_here
+```
+
+## Running the Application
+
+1. Start the FastAPI server:
+```bash
+uv run uvicorn main:app --reload
+```
+
+2. The API will be available at `http://localhost:8000`
+
+## Testing with the Client
+
+You can use the included client to test the API interactively. The client provides a simple interface to:
+- Create new chat sessions
+- Send messages and see responses
+- View chat history
+- Test streaming responses
+
+### Running the Client
+
+1. In a new terminal, with your virtual environment activated, run:
+```bash
+uv run python client.py
+```
+
+2. The client interface will open in your default web browser at `http://localhost:7860`
+
+### Using the Client
+
+1. **Create a New Chat**
+   - Click the "Create New Chat" button
+   - A new chat session will be created with a unique ID
+   - The chat ID will be displayed at the top of the interface
+
+2. **Send Messages**
+   - Type your message in the input box
+   - Click "Send" or press Enter
+   - The response will appear in the chat window
+   - For streaming responses, you'll see the text appear gradually
+
+3. **Example Queries**
+   ```
+   "Find abilities related to player movement"
+   "Modify the speed of the sprint ability"
+   "Create a UI for the fireball ability"
+   ```
+
+4. **View Chat History**
+   - All messages and responses are saved in the chat history
+   - You can scroll up to view previous interactions
+   - The history persists until you create a new chat or close the client
+
+5. **Debug Information**
+   - The client shows tool calls and their results
+   - You can see the raw API responses
+   - Error messages are displayed if something goes wrong
+
+### Client Features
+
+- Real-time streaming of responses
+- Automatic chat session management
+- Tool call visualization
+- Error handling and display
+- Chat history persistence
+- Easy testing of all API endpoints
 
 ## API Endpoints
 
-### Core Endpoints
-- `POST /create_chat` - Create a new chat session
-- `POST /chat/{chat_id}/message` - Send a message to a specific chat
-- `GET /chat/{chat_id}/history` - Get full chat history
-- `GET /chats` - List all active chat sessions
-- `DELETE /chat/{chat_id}` - Delete a specific chat session
-
-### API Documentation
-Once the FastAPI server is running, visit:
-- **Swagger UI**: `http://localhost:8000/docs`
-- **ReDoc**: `http://localhost:8000/redoc`
-
-## Usage Guide
-
-### Using the Gradio Client
-1. **Start both servers** (FastAPI backend and Gradio client)
-2. **Open the Gradio interface** at `http://localhost:7860`
-3. **Create a new chat** by clicking "Create New Chat 🆕"
-4. **Start chatting** by typing messages and clicking "Send 📤"
-5. **Manage chats** using the control panel on the right
-
-### Using the API Directly
-#### Create a new chat:
-```bash
-curl -X POST "http://localhost:8000/create_chat"
+### Create a New Chat Session
+```http
+POST /create_chat
+```
+Response:
+```json
+{
+    "chat_id": "uuid",
+    "message": "Chat created successfully with ID: uuid"
+}
 ```
 
-#### Send a message:
-```bash
-curl -X POST "http://localhost:8000/chat/{chat_id}/message" \
-     -H "Content-Type: application/json" \
-     -d '{"message": "Hello, how are you?"}'
+### Send a Message
+```http
+POST /chat/{chat_id}/message
+```
+Request body:
+```json
+{
+    "message": "Your message here"
+}
 ```
 
-## Project Structure
+### Stream a Message
+```http
+POST /chat/{chat_id}/message/stream
 ```
-roam-contextual-chatbot/
-├── main.py              # FastAPI backend server
-├── client.py            # Gradio frontend client
-├── requirements.txt     # Python dependencies
-└── README.md           # This file
+Request body:
+```json
+{
+    "message": "Your message here"
+}
 ```
 
-## Configuration
+### Get Chat History
+```http
+GET /chat/{chat_id}/history
+```
 
-### Environment Variables
-- `OPENAI_API_KEY`: Your OpenAI API key (required)
+### List All Chats
+```http
+GET /chats
+```
 
-### Default Ports
-- **FastAPI Backend**: `8000`
-- **Gradio Client**: `7860`
+### Delete a Chat
+```http
+DELETE /chat/{chat_id}
+```
 
-## Features Explained
+## Available Tools
 
-### Chat Session Management
-- Each chat session has a unique UUID
-- Chat history is maintained in memory (in production, consider using a database)
-- Multiple concurrent chat sessions are supported
+### find_attributes
+Searches for game attributes using keywords and endpoint flags.
+```python
+find_attributes(
+    kw1: str,  # First keyword
+    kw2: str,  # Second keyword
+    kw3: str,  # Third keyword
+    search_abilities: bool = False,
+    search_shaders: bool = False,
+    search_behaviors: bool = False,
+    search_objectives: bool = False,
+    user_query: str = ""
+)
+```
 
-### GPT-4o-mini Integration
-- Uses OpenAI's GPT-4o-mini model for responses
-- Maintains conversation context through message history
-- Configurable temperature (0.7) and max tokens (1000)
+### edit_attribute
+Edits a game attribute by name and category.
+```python
+edit_attribute(
+    attribute_name: str,
+    category: str,
+    variable_name: str,
+    new_value: Any,
+    operation: str = "set"
+)
+```
 
-### Error Handling
-- Comprehensive error handling for API calls
-- User-friendly error messages in the Gradio interface
-- HTTP status codes for API responses
+### create_ui
+Creates UI configuration for multiple attributes.
+```python
+create_ui(
+    attribute_names: List[str],
+    categories: List[str],
+    layout: str = "vertical"
+)
+```
 
-## Development Notes
+## Logging
 
-### Memory Storage
-Currently, chat sessions are stored in memory. For production use, consider:
-- Database storage (PostgreSQL, MongoDB)
-- Redis for session management
-- Persistent storage solutions
+Logs are stored in the `logs` directory with the format:
+```
+logs/chat_{chat_id}_{timestamp}.log
+```
 
-### Security Considerations
-- API key protection
-- Rate limiting
-- Input validation and sanitization
-- CORS configuration for production
+## Error Handling
 
-### Scaling
-- Add authentication and authorization
-- Implement rate limiting
-- Add database persistence
-- Use async database operations
-- Add logging and monitoring
+The application includes comprehensive error handling for:
+- Invalid chat sessions
+- API errors
+- Tool execution errors
+- Streaming errors
 
-## Troubleshooting
 
-### Common Issues
-1. **"Connection error"**: Ensure FastAPI server is running on port 8000
-2. **"OpenAI API error"**: Check your API key is set correctly and has sufficient credits
-3. **"Chat session not found"**: Create a new chat session first
-
-### Debug Mode
-Both applications run in debug mode by default for development. For production:
-- Set `debug=False` in Gradio
-- Configure proper logging in FastAPI
-- Use production WSGI server like Gunicorn
-
-## Contributing
-Feel free to submit issues and enhancement requests!
-
-## License
-This project is open source and available under the MIT License.

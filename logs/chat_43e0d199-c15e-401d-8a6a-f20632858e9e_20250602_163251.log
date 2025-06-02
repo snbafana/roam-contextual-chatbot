@@ -1,0 +1,133 @@
+2025-06-02 16:33:17,317 - chat_43e0d199-c15e-401d-8a6a-f20632858e9e - INFO - Tool Call: find_attributes
+2025-06-02 16:33:17,317 - chat_43e0d199-c15e-401d-8a6a-f20632858e9e - INFO - Arguments: {
+  "kw1": "win",
+  "kw2": "score",
+  "kw3": "easier",
+  "search_abilities": false,
+  "search_shaders": false,
+  "search_behaviors": false,
+  "search_objectives": true,
+  "user_query": "make it easier to win and get a lower score"
+}
+2025-06-02 16:33:17,720 - chat_43e0d199-c15e-401d-8a6a-f20632858e9e - INFO - Result: [
+  {
+    "OID": "OBJ3",
+    "Title": "Kill Enemies",
+    "Description": "Defeat 10 enemies.",
+    "WinCondition": {
+      "kills": 10
+    },
+    "endpoint_type": "objectives",
+    "source": "/search/objectives"
+  },
+  {
+    "OID": "OBJ1",
+    "Title": "Collect Coins",
+    "Description": "Collect 100 coins.",
+    "WinCondition": {
+      "coins": 100
+    },
+    "endpoint_type": "objectives",
+    "source": "/search/objectives"
+  },
+  {
+    "OID": "OBJ6",
+    "Title": "Reach Exit",
+    "Description": "Get to the level exit.",
+    "WinCondition": {
+      "exitReached": true
+    },
+    "endpoint_type": "objectives",
+    "source": "/search/objectives"
+  },
+  {
+    "OID": "OBJ4",
+    "Title": "Rescue NPC",
+    "Description": "Rescue the hostage.",
+    "WinCondition": {
+      "npcSafe": true
+    },
+    "endpoint_type": "objectives",
+    "source": "/search/objectives"
+  }
+]
+2025-06-02 16:33:17,720 - chat_43e0d199-c15e-401d-8a6a-f20632858e9e - INFO - Tool Call: find_attributes
+2025-06-02 16:33:17,720 - chat_43e0d199-c15e-401d-8a6a-f20632858e9e - INFO - Arguments: {
+  "kw1": "objective",
+  "kw2": "win",
+  "kw3": "score",
+  "search_abilities": false,
+  "search_shaders": false,
+  "search_behaviors": false,
+  "search_objectives": true,
+  "user_query": "make it easier to win and get a lower score"
+}
+2025-06-02 16:33:18,128 - chat_43e0d199-c15e-401d-8a6a-f20632858e9e - INFO - Result: [
+  {
+    "OID": "OBJ3",
+    "Title": "Kill Enemies",
+    "Description": "Defeat 10 enemies.",
+    "WinCondition": {
+      "kills": 10
+    },
+    "endpoint_type": "objectives",
+    "source": "/search/objectives"
+  },
+  {
+    "OID": "OBJ10",
+    "Title": "Escort",
+    "Description": "Escort ally to safe zone.",
+    "WinCondition": {
+      "npcReached": true,
+      "npcHealth": ">0"
+    },
+    "endpoint_type": "objectives",
+    "source": "/search/objectives"
+  },
+  {
+    "OID": "OBJ4",
+    "Title": "Rescue NPC",
+    "Description": "Rescue the hostage.",
+    "WinCondition": {
+      "npcSafe": true
+    },
+    "endpoint_type": "objectives",
+    "source": "/search/objectives"
+  },
+  {
+    "OID": "OBJ1",
+    "Title": "Collect Coins",
+    "Description": "Collect 100 coins.",
+    "WinCondition": {
+      "coins": 100
+    },
+    "endpoint_type": "objectives",
+    "source": "/search/objectives"
+  },
+  {
+    "OID": "OBJ6",
+    "Title": "Reach Exit",
+    "Description": "Get to the level exit.",
+    "WinCondition": {
+      "exitReached": true
+    },
+    "endpoint_type": "objectives",
+    "source": "/search/objectives"
+  }
+]
+2025-06-02 16:33:35,134 - chat_43e0d199-c15e-401d-8a6a-f20632858e9e - INFO - Tool Call: edit_attribute
+2025-06-02 16:33:35,134 - chat_43e0d199-c15e-401d-8a6a-f20632858e9e - INFO - Arguments: {
+  "attribute_name": "Kill Enemies",
+  "category": "objectives",
+  "variable_name": "kills",
+  "new_value": 5,
+  "operation": "set"
+}
+2025-06-02 16:33:35,134 - chat_43e0d199-c15e-401d-8a6a-f20632858e9e - INFO - Result: {
+  "action_type": "modify",
+  "category": "gameplay",
+  "parameters": {
+    "kills": 5
+  },
+  "confidence": 0.95
+}

@@ -1,0 +1,83 @@
+2025-06-02 16:36:50,477 - chat_f2cdcbc5-0ebf-4672-b38c-ac9bf24caf1e - INFO - Tool Call: find_attributes
+2025-06-02 16:36:50,477 - chat_f2cdcbc5-0ebf-4672-b38c-ac9bf24caf1e - INFO - Arguments: {
+  "kw1": "dashing",
+  "kw2": "speed",
+  "kw3": "change",
+  "search_abilities": true,
+  "search_shaders": false,
+  "search_behaviors": false,
+  "search_objectives": false,
+  "user_query": "change dashing speed to 2"
+}
+2025-06-02 16:36:50,869 - chat_f2cdcbc5-0ebf-4672-b38c-ac9bf24caf1e - INFO - Result: [
+  {
+    "BID": "BA100",
+    "Name": "Double Jump",
+    "Description": "Allows the player to jump a second time in mid-air.",
+    "Variables": {
+      "maxJumps": 2,
+      "cooldown": 1.5
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA106",
+    "Name": "Teleport",
+    "Description": "Instantly teleports the player forward.",
+    "Variables": {
+      "range": 8.0,
+      "cooldown": 4.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA102",
+    "Name": "Dash",
+    "Description": "Quickly moves the player in a chosen direction.",
+    "Variables": {
+      "dashDistance": 7.0,
+      "cooldown": 2.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA107",
+    "Name": "Time Slow",
+    "Description": "Slows time for everything but the player.",
+    "Variables": {
+      "duration": 3.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA109",
+    "Name": "Heal",
+    "Description": "Restores a portion of player health over time.",
+    "Variables": {
+      "healRate": 5,
+      "duration": 10
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  }
+]
+2025-06-02 16:37:07,859 - chat_f2cdcbc5-0ebf-4672-b38c-ac9bf24caf1e - INFO - Tool Call: edit_attribute
+2025-06-02 16:37:07,859 - chat_f2cdcbc5-0ebf-4672-b38c-ac9bf24caf1e - INFO - Arguments: {
+  "attribute_name": "Dash",
+  "category": "abilities",
+  "variable_name": "dashDistance",
+  "new_value": 2,
+  "operation": "set"
+}
+2025-06-02 16:37:07,859 - chat_f2cdcbc5-0ebf-4672-b38c-ac9bf24caf1e - INFO - Result: {
+  "action_type": "modify",
+  "category": "gameplay",
+  "parameters": {
+    "abilities.dashDistance": 2
+  },
+  "confidence": 0.95
+}
