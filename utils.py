@@ -91,11 +91,6 @@ async def find_attributes_async(kw1: str, kw2: str, kw3: str,
     Async function to search all endpoints concurrently and parse to Pydantic models.
     Returns a list of dictionaries that are JSON serializable.
     """
-    search_payload = {
-        "keywords": [kw1, kw2, kw3],
-        "query": f"{kw1} {kw2} {kw3}"
-    }
-    
     all_results = []
     
     async with aiohttp.ClientSession() as session:
@@ -103,19 +98,55 @@ async def find_attributes_async(kw1: str, kw2: str, kw3: str,
         
         # Create search tasks for each enabled endpoint
         if search_abilities:
-            tasks.append(("abilities", session.post(f"{API_BASE_URL}/search/abilities", json=search_payload, 
+            tasks.append(("abilities", session.post(f"{API_BASE_URL}/search/abilities", 
+                                                   json={"query": kw1, "top_k": 3},
+                                                   headers={"Content-Type": "application/json"}, 
+                                                   timeout=aiohttp.ClientTimeout(total=10))))
+            tasks.append(("abilities", session.post(f"{API_BASE_URL}/search/abilities", 
+                                                   json={"query": kw2, "top_k": 3},
+                                                   headers={"Content-Type": "application/json"}, 
+                                                   timeout=aiohttp.ClientTimeout(total=10))))
+            tasks.append(("abilities", session.post(f"{API_BASE_URL}/search/abilities", 
+                                                   json={"query": kw3, "top_k": 3},
                                                    headers={"Content-Type": "application/json"}, 
                                                    timeout=aiohttp.ClientTimeout(total=10))))
         if search_shaders:
-            tasks.append(("shaders", session.post(f"{API_BASE_URL}/search/shaders", json=search_payload,
+            tasks.append(("shaders", session.post(f"{API_BASE_URL}/search/shaders",
+                                                 json={"query": kw1, "top_k": 3},
+                                                 headers={"Content-Type": "application/json"},
+                                                 timeout=aiohttp.ClientTimeout(total=10))))
+            tasks.append(("shaders", session.post(f"{API_BASE_URL}/search/shaders",
+                                                 json={"query": kw2, "top_k": 3},
+                                                 headers={"Content-Type": "application/json"},
+                                                 timeout=aiohttp.ClientTimeout(total=10))))
+            tasks.append(("shaders", session.post(f"{API_BASE_URL}/search/shaders",
+                                                 json={"query": kw3, "top_k": 3},
                                                  headers={"Content-Type": "application/json"},
                                                  timeout=aiohttp.ClientTimeout(total=10))))
         if search_behaviors:
-            tasks.append(("behaviors", session.post(f"{API_BASE_URL}/search/behaviours", json=search_payload,
+            tasks.append(("behaviors", session.post(f"{API_BASE_URL}/search/behaviours",
+                                                   json={"query": kw1, "top_k": 3},
+                                                   headers={"Content-Type": "application/json"},
+                                                   timeout=aiohttp.ClientTimeout(total=10))))
+            tasks.append(("behaviors", session.post(f"{API_BASE_URL}/search/behaviours",
+                                                   json={"query": kw2, "top_k": 3},
+                                                   headers={"Content-Type": "application/json"},
+                                                   timeout=aiohttp.ClientTimeout(total=10))))
+            tasks.append(("behaviors", session.post(f"{API_BASE_URL}/search/behaviours",
+                                                   json={"query": kw3, "top_k": 3},
                                                    headers={"Content-Type": "application/json"},
                                                    timeout=aiohttp.ClientTimeout(total=10))))
         if search_objectives:
-            tasks.append(("objectives", session.post(f"{API_BASE_URL}/search/objectives", json=search_payload,
+            tasks.append(("objectives", session.post(f"{API_BASE_URL}/search/objectives",
+                                                    json={"query": kw1, "top_k": 3},
+                                                    headers={"Content-Type": "application/json"},
+                                                    timeout=aiohttp.ClientTimeout(total=10))))
+            tasks.append(("objectives", session.post(f"{API_BASE_URL}/search/objectives",
+                                                    json={"query": kw2, "top_k": 3},
+                                                    headers={"Content-Type": "application/json"},
+                                                    timeout=aiohttp.ClientTimeout(total=10))))
+            tasks.append(("objectives", session.post(f"{API_BASE_URL}/search/objectives",
+                                                    json={"query": kw3, "top_k": 3},
                                                     headers={"Content-Type": "application/json"},
                                                     timeout=aiohttp.ClientTimeout(total=10))))
         
@@ -161,7 +192,28 @@ async def find_attributes_async(kw1: str, kw2: str, kw3: str,
     def get_score(item):
         return item.get("score", item.get("relevance", item.get("confidence", 0)))
     
-    return sorted(all_results, key=get_score, reverse=True)
+    # Deduplicate results based on ID
+    def get_id(item):
+        if item.get("endpoint_type") == "abilities" or item.get("endpoint_type") == "behaviors":
+            return item.get("BID")
+        elif item.get("endpoint_type") == "shaders":
+            return item.get("ShaderID")
+        elif item.get("endpoint_type") == "objectives":
+            return item.get("OID")
+        return None
+
+    # Create a dictionary to store unique results by ID
+    unique_results = {}
+    for result in all_results:
+        result_id = get_id(result)
+        if result_id:
+            # If we haven't seen this ID before, or if this result has a higher score
+            if result_id not in unique_results or get_score(result) > get_score(unique_results[result_id]):
+                unique_results[result_id] = result
+    
+    # Convert back to list and sort by score
+    deduplicated_results = list(unique_results.values())
+    return sorted(deduplicated_results, key=get_score, reverse=True)
 
 async def edit_attribute(attribute_name: str, category: str, variable_name: str, new_value: Any, operation: str = "set") -> Dict[str, Any]:
     """
@@ -406,15 +458,15 @@ TOOL_SCHEMAS = {
             "properties": {
                 "kw1": {
                     "type": "string",
-                    "description": "First keyword representing user intent. Can be different from the user's query."
+                    "description": "First searchable keyword (e.g., 'teleport', 'speed', 'fireball'). Avoid generic terms like 'increase' or 'cooldown'."
                 },
                 "kw2": {
                     "type": "string",
-                    "description": "Second keyword representing user intent. Differnt from kw1, different from user's query."
+                    "description": "Second searchable keyword (e.g., 'dash', 'jump', 'shield'). Must be different from kw1 and kw3."
                 },
                 "kw3": {
                     "type": "string",
-                    "description": "Third keyword representing user intent. Differnt from kw1, kw2, different from user's query."
+                    "description": "Third searchable keyword (e.g., 'blast', 'heal', 'stun'). Must be different from kw1 and kw2."
                 },
                 "search_abilities": {
                     "type": "boolean",
@@ -504,19 +556,22 @@ TOOL_SCHEMAS = {
 
 # Updated template prompt for the AI agent
 TEMPLATE_PROMPT = """
-You are an intelligent game modification assistant that helps users modify game parameters through natural language commands.
+You are an intelligent game modification assistant that helps users modify game parameters through natural language commands. Before you take any action, or provide the user with any information about actions they can take,
+use the tools to populate your relevant knowlege. If you do not know something, simply use tools
 
 ## Available Tools:
 
 1. **find_attributes(kw1, kw2, kw3, search_abilities, search_shaders, search_behaviors, search_objectives)**
    - Search for game attributes using keywords and endpoint flags
-   - Create keywords based on user's query, that are helpful and varied for semantic search, not specifically the user's query
-   - Returns list of matching attributes with their details
+   - Infer keywords from user query
+   - Keywords MUST be specific, searchable terms (e.g., 'teleport', 'speed', 'fireball')
+   - DO NOT use generic terms like 'increase', 'decrease', 'cooldown', 'duration'
+   - Each keyword should be different and represent a distinct game element
    - After finding attributes, ALWAYS show the user:
-     * All found attributes and their current values
-     * For abilities/behaviors: Show all variables and their current values, with exact names
-     * For shaders: Show style, colors, and current settings, with exact names
-     * For objectives: Show win conditions and current values, with exact names
+     * ALL found attributes and their current values
+     * For abilities/behaviors: Show ALL variables and their current values, with exact names
+     * For shaders: Show ALL style properties, colors, and current settings, with exact names
+     * For objectives: Show ALL win conditions and current values, with exact names
 
 2. **edit_attribute(attribute_name, category, variable_name, new_value, operation)**
    - Edit a game attribute by name and category
@@ -547,10 +602,16 @@ You are an intelligent game modification assistant that helps users modify game 
 ## Intent Classification Guidelines:
 
 ### Keyword Extraction:
-Extract 3 distinct keywords that capture the user's intent:
-- **Primary subject** (player, weapon, environment, character)
-- **Action/attribute** (speed, damage, lighting, jump, fire_rate)  
-- **Modifier** (faster, stronger, darker, increase, decrease)
+Extract 3 distinct, searchable keywords that capture the user's intent:
+- **Primary subject** (teleport, fireball, shield, dash)
+- **Action/attribute** (speed, damage, jump, heal)  
+- **Modifier** (blast, stun, buff, aura)
+
+DO NOT use generic terms like:
+- increase, decrease, multiply
+- cooldown, duration, range
+- faster, slower, stronger
+- boost, reduce, modify
 
 ### Endpoint Selection:
 Choose which endpoints to search based on user intent:

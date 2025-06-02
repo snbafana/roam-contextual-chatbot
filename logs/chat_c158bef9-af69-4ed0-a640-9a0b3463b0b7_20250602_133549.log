@@ -1,0 +1,233 @@
+2025-06-02 13:35:59,745 - chat_c158bef9-af69-4ed0-a640-9a0b3463b0b7 - INFO - Tool Call: find_attributes
+2025-06-02 13:35:59,745 - chat_c158bef9-af69-4ed0-a640-9a0b3463b0b7 - INFO - Arguments: {
+  "kw1": "sprint",
+  "kw2": "speed",
+  "kw3": "cooldown",
+  "search_abilities": true
+}
+2025-06-02 13:36:00,195 - chat_c158bef9-af69-4ed0-a640-9a0b3463b0b7 - INFO - Result: [
+  {
+    "BID": "BA101",
+    "Name": "Wall Climb",
+    "Description": "Enables the player to climb walls.",
+    "Variables": {
+      "climbSpeed": 5.0,
+      "duration": 4.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA108",
+    "Name": "Super Jump",
+    "Description": "Temporarily boosts jump height.",
+    "Variables": {
+      "jumpBoost": 2.5,
+      "duration": 2
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA109",
+    "Name": "Heal",
+    "Description": "Restores a portion of player health over time.",
+    "Variables": {
+      "healRate": 5,
+      "duration": 10
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA107",
+    "Name": "Time Slow",
+    "Description": "Slows time for everything but the player.",
+    "Variables": {
+      "duration": 3.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA102",
+    "Name": "Dash",
+    "Description": "Quickly moves the player in a chosen direction.",
+    "Variables": {
+      "dashDistance": 7.0,
+      "cooldown": 2.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA106",
+    "Name": "Teleport",
+    "Description": "Instantly teleports the player forward.",
+    "Variables": {
+      "range": 8.0,
+      "cooldown": 4.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  }
+]
+2025-06-02 13:36:00,195 - chat_c158bef9-af69-4ed0-a640-9a0b3463b0b7 - INFO - Tool Call: find_attributes
+2025-06-02 13:36:00,195 - chat_c158bef9-af69-4ed0-a640-9a0b3463b0b7 - INFO - Arguments: {
+  "kw1": "dash",
+  "kw2": "speed",
+  "kw3": "cooldown",
+  "search_abilities": true
+}
+2025-06-02 13:36:00,591 - chat_c158bef9-af69-4ed0-a640-9a0b3463b0b7 - INFO - Result: [
+  {
+    "BID": "BA100",
+    "Name": "Double Jump",
+    "Description": "Allows the player to jump a second time in mid-air.",
+    "Variables": {
+      "maxJumps": 2,
+      "cooldown": 1.5
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA108",
+    "Name": "Super Jump",
+    "Description": "Temporarily boosts jump height.",
+    "Variables": {
+      "jumpBoost": 2.5,
+      "duration": 2
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA103",
+    "Name": "Grapple Hook",
+    "Description": "Lets the player grapple to surfaces.",
+    "Variables": {
+      "range": 12.0,
+      "cooldown": 3.5
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA107",
+    "Name": "Time Slow",
+    "Description": "Slows time for everything but the player.",
+    "Variables": {
+      "duration": 3.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA102",
+    "Name": "Dash",
+    "Description": "Quickly moves the player in a chosen direction.",
+    "Variables": {
+      "dashDistance": 7.0,
+      "cooldown": 2.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA106",
+    "Name": "Teleport",
+    "Description": "Instantly teleports the player forward.",
+    "Variables": {
+      "range": 8.0,
+      "cooldown": 4.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA109",
+    "Name": "Heal",
+    "Description": "Restores a portion of player health over time.",
+    "Variables": {
+      "healRate": 5,
+      "duration": 10
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  }
+]
+2025-06-02 13:36:00,591 - chat_c158bef9-af69-4ed0-a640-9a0b3463b0b7 - INFO - Tool Call: find_attributes
+2025-06-02 13:36:00,591 - chat_c158bef9-af69-4ed0-a640-9a0b3463b0b7 - INFO - Arguments: {
+  "kw1": "teleport",
+  "kw2": "speed",
+  "kw3": "cooldown",
+  "search_abilities": true
+}
+2025-06-02 13:36:01,003 - chat_c158bef9-af69-4ed0-a640-9a0b3463b0b7 - INFO - Result: [
+  {
+    "BID": "BA106",
+    "Name": "Teleport",
+    "Description": "Instantly teleports the player forward.",
+    "Variables": {
+      "range": 8.0,
+      "cooldown": 4.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA102",
+    "Name": "Dash",
+    "Description": "Quickly moves the player in a chosen direction.",
+    "Variables": {
+      "dashDistance": 7.0,
+      "cooldown": 2.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA101",
+    "Name": "Wall Climb",
+    "Description": "Enables the player to climb walls.",
+    "Variables": {
+      "climbSpeed": 5.0,
+      "duration": 4.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA107",
+    "Name": "Time Slow",
+    "Description": "Slows time for everything but the player.",
+    "Variables": {
+      "duration": 3.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA108",
+    "Name": "Super Jump",
+    "Description": "Temporarily boosts jump height.",
+    "Variables": {
+      "jumpBoost": 2.5,
+      "duration": 2
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA109",
+    "Name": "Heal",
+    "Description": "Restores a portion of player health over time.",
+    "Variables": {
+      "healRate": 5,
+      "duration": 10
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  }
+]

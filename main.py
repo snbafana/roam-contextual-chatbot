@@ -10,15 +10,42 @@ from dotenv import load_dotenv
 import json
 from utils import TOOL_SCHEMAS, TEMPLATE_PROMPT, FUNCTION_MAP
 import asyncio
+import logging
+from pathlib import Path
 
 load_dotenv()
+
+# Set up logging
+LOGS_DIR = Path("logs")
+LOGS_DIR.mkdir(exist_ok=True)
+
+# Configure logging
+def setup_logger(chat_id: str) -> logging.Logger:
+    """Set up a logger for a specific chat session"""
+    logger = logging.getLogger(f"chat_{chat_id}")
+    logger.setLevel(logging.INFO)
+    
+    # Create a file handler for this chat session
+    log_file = LOGS_DIR / f"chat_{chat_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setLevel(logging.INFO)
+    
+    # Create a formatter
+    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    file_handler.setFormatter(formatter)
+    
+    # Add the handler to the logger
+    logger.addHandler(file_handler)
+    
+    return logger
 
 app = FastAPI(title="Contextual Chat API", description="Chat API with GPT-4o-mini integration")
 
 # In-memory storage for chat sessions
 chat_sessions: Dict[str, List[Dict]] = {}
+chat_loggers: Dict[str, logging.Logger] = {}
 
-async def execute_tool_call(tool_call: Dict) -> Dict:
+async def execute_tool_call(tool_call: Dict, chat_id: str) -> Dict:
     """Execute a tool call and return its result"""
     try:
         func_name = tool_call.get("function", {}).get("name")
@@ -33,24 +60,44 @@ async def execute_tool_call(tool_call: Dict) -> Dict:
             # Parse arguments
             args = json.loads(args_str)
             
+            # Log the tool call
+            logger = chat_loggers.get(chat_id)
+            if logger:
+                logger.info(f"Tool Call: {func_name}")
+                logger.info(f"Arguments: {json.dumps(args, indent=2)}")
+            
             # Execute function
             if asyncio.iscoroutinefunction(func):
                 result = await func(**args)
             else:
                 result = func(**args)
+            
+            # Log the result
+            if logger:
+                logger.info(f"Result: {json.dumps(result, indent=2)}")
+            
             return {
                 "function": func_name,
                 "result": result
             }
         except json.JSONDecodeError:
-            return {"error": f"Invalid JSON arguments for {func_name}"}
+            error_msg = f"Invalid JSON arguments for {func_name}"
+            if logger:
+                logger.error(error_msg)
+            return {"error": error_msg}
         except Exception as e:
-            return {"error": f"Error executing {func_name}: {str(e)}"}
+            error_msg = f"Error executing {func_name}: {str(e)}"
+            if logger:
+                logger.error(error_msg)
+            return {"error": error_msg}
             
     except Exception as e:
-        return {"error": f"Error processing tool call: {str(e)}"}
+        error_msg = f"Error processing tool call: {str(e)}"
+        if logger:
+            logger.error(error_msg)
+        return {"error": error_msg}
 
-async def format_tool_calls(tool_calls: List[Dict]) -> str:
+async def format_tool_calls(tool_calls: List[Dict], chat_id: str) -> str:
     """Format tool calls into a readable string"""
     if not tool_calls:
         return ""
@@ -70,7 +117,7 @@ async def format_tool_calls(tool_calls: List[Dict]) -> str:
                 formatted_args = args_str
             
             # Execute the function and get result
-            result = await execute_tool_call(call)
+            result = await execute_tool_call(call, chat_id)
             
             # Create formatted call string
             call_str = f"Function: {func_name}\nArguments:\n{formatted_args}\nResult:\n{json.dumps(result, indent=2)}"
@@ -106,6 +153,9 @@ async def create_chat():
         }
     ]
     
+    # Set up logger for this chat session
+    chat_loggers[chat_id] = setup_logger(chat_id)
+    
     return ChatCreateResponse(
         chat_id=chat_id,
         message=f"Chat created successfully with ID: {chat_id}"
@@ -126,6 +176,11 @@ async def send_message(chat_id: str, request: MessageRequest):
         "timestamp": datetime.now().isoformat()
     }
     chat_sessions[chat_id].append(user_message)
+    
+    # Log user message
+    logger = chat_loggers.get(chat_id)
+    if logger:
+        logger.info(f"User Message: {request.message}")
     
     try:
         # Prepare messages for OpenAI API
@@ -148,11 +203,11 @@ async def send_message(chat_id: str, request: MessageRequest):
             # Execute each tool call and collect results
             tool_results = []
             for tool_call in message.tool_calls:
-                result = await execute_tool_call(tool_call.dict())
+                result = await execute_tool_call(tool_call.dict(), chat_id)
                 tool_results.append(result)
             
             # Format tool calls and their results for internal context
-            tool_calls_str = await format_tool_calls([call.dict() for call in message.tool_calls])
+            tool_calls_str = await format_tool_calls([call.dict() for call in message.tool_calls], chat_id)
             
             # Add tool results to the response for context
             if tool_results:
@@ -166,42 +221,17 @@ async def send_message(chat_id: str, request: MessageRequest):
             }
             chat_sessions[chat_id].append(tool_message)
             
-            # Make a second call to generate natural language response
-            follow_up_messages = messages + [
-                {"role": "assistant", "content": message.content}
-            ]
-            
-            # Add function messages with names
-            for tool_call in message.tool_calls:
-                follow_up_messages.append({
-                    "role": "function",
-                    "name": tool_call.function.name,
-                    "content": tool_call.function.arguments
-                })
-            
-            follow_up_response = openai.chat.completions.create(
-                model="gpt-4o-mini",
-                messages=follow_up_messages,
-                max_tokens=1000,
-                temperature=0.7
-            )
-            
-            natural_response = follow_up_response.choices[0].message.content
-            
-            # Add natural language response to chat history
-            assistant_message = {
-                "role": "assistant",
-                "content": natural_response,
-                "timestamp": datetime.now().isoformat()
-            }
-            chat_sessions[chat_id].append(assistant_message)
-            
+            # Return the tool call results directly
             return MessageResponse(
-                response=natural_response,
+                response=tool_calls_str,
                 chat_id=chat_id
             )
         else:
             assistant_response = message.content
+            
+            # Log assistant response
+            if logger:
+                logger.info(f"Assistant Response: {assistant_response}")
             
             # Add assistant response to chat history
             assistant_message = {
@@ -217,7 +247,10 @@ async def send_message(chat_id: str, request: MessageRequest):
             )
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error calling OpenAI API: {str(e)}")
+        error_msg = f"Error calling OpenAI API: {str(e)}"
+        if logger:
+            logger.error(error_msg)
+        raise HTTPException(status_code=500, detail=error_msg)
 
 @app.post("/chat/{chat_id}/message/stream")
 async def send_message_stream(chat_id: str, request: MessageRequest):
@@ -301,7 +334,7 @@ async def send_message_stream(chat_id: str, request: MessageRequest):
                 # Execute each tool call and collect results
                 tool_results = []
                 for call in tool_calls:
-                    result = await execute_tool_call(call)
+                    result = await execute_tool_call(call, chat_id)
                     tool_results.append(result)
                 
                 # Format tool calls and their results for internal context
@@ -329,57 +362,40 @@ async def send_message_stream(chat_id: str, request: MessageRequest):
                 }
                 chat_sessions[chat_id].append(tool_message)
                 
-                # Make a second call to generate natural language response
-                follow_up_messages = messages + [
-                    {"role": "assistant", "content": natural_response}
-                ]
+                # Send completion signal with tool call results
+                completion_data = {
+                    "content": "",
+                    "is_complete": True,
+                    "chat_id": chat_id,
+                    "full_response": tool_calls_str
+                }
+                yield f"data: {json.dumps(completion_data)}\n\n"
                 
-                # Add function messages with names
-                for call in tool_calls:
-                    follow_up_messages.append({
-                        "role": "function",
-                        "name": call["function"]["name"],
-                        "content": call["function"]["arguments"]
-                    })
-                
-                follow_up_response = openai.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=follow_up_messages,
-                    max_tokens=1000,
-                    temperature=0.7,
-                    stream=True
-                )
-                
-                # Stream the follow-up response
-                for chunk in follow_up_response:
-                    if chunk.choices[0].delta.content is not None:
-                        content = chunk.choices[0].delta.content
-                        natural_response += content
-                        
-                        # Send each chunk as JSON
-                        chunk_data = {
-                            "content": content,
-                            "is_complete": False,
-                            "chat_id": chat_id
-                        }
-                        yield f"data: {json.dumps(chunk_data)}\n\n"
+                # Add tool call results to chat history
+                assistant_message = {
+                    "role": "assistant",
+                    "content": tool_calls_str,
+                    "timestamp": datetime.now().isoformat()
+                }
+                chat_sessions[chat_id].append(assistant_message)
             
-            # Send completion signal with natural language response
-            completion_data = {
-                "content": "",
-                "is_complete": True,
-                "chat_id": chat_id,
-                "full_response": natural_response
-            }
-            yield f"data: {json.dumps(completion_data)}\n\n"
-            
-            # Add natural language response to chat history
-            assistant_message = {
-                "role": "assistant",
-                "content": natural_response,
-                "timestamp": datetime.now().isoformat()
-            }
-            chat_sessions[chat_id].append(assistant_message)
+            else:
+                # Send completion signal with natural response
+                completion_data = {
+                    "content": "",
+                    "is_complete": True,
+                    "chat_id": chat_id,
+                    "full_response": natural_response
+                }
+                yield f"data: {json.dumps(completion_data)}\n\n"
+                
+                # Add natural response to chat history
+                assistant_message = {
+                    "role": "assistant",
+                    "content": natural_response,
+                    "timestamp": datetime.now().isoformat()
+                }
+                chat_sessions[chat_id].append(assistant_message)
             
         except Exception as e:
             error_data = {
@@ -424,6 +440,14 @@ async def delete_chat(chat_id: str):
     """Delete a specific chat session"""
     if chat_id not in chat_sessions:
         raise HTTPException(status_code=404, detail="Chat session not found")
+    
+    # Remove logger
+    if chat_id in chat_loggers:
+        logger = chat_loggers[chat_id]
+        for handler in logger.handlers[:]:
+            handler.close()
+            logger.removeHandler(handler)
+        del chat_loggers[chat_id]
     
     del chat_sessions[chat_id]
     return {"message": f"Chat {chat_id} deleted successfully"}

@@ -1,0 +1,124 @@
+2025-06-02 13:07:00,230 - chat_fa43cbe0-2e7d-4cc4-b28e-ad7e54af2667 - INFO - Tool Call: find_attributes
+2025-06-02 13:07:00,230 - chat_fa43cbe0-2e7d-4cc4-b28e-ad7e54af2667 - INFO - Arguments: {
+  "kw1": "sprint",
+  "kw2": "cooldown",
+  "kw3": "speed",
+  "search_abilities": true
+}
+2025-06-02 13:07:00,431 - chat_fa43cbe0-2e7d-4cc4-b28e-ad7e54af2667 - INFO - Result: [
+  {
+    "BID": "BA107",
+    "Name": "Time Slow",
+    "Description": "Slows time for everything but the player.",
+    "Variables": {
+      "duration": 3.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA108",
+    "Name": "Super Jump",
+    "Description": "Temporarily boosts jump height.",
+    "Variables": {
+      "jumpBoost": 2.5,
+      "duration": 2
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA100",
+    "Name": "Double Jump",
+    "Description": "Allows the player to jump a second time in mid-air.",
+    "Variables": {
+      "maxJumps": 2,
+      "cooldown": 1.5
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  }
+]
+2025-06-02 13:07:00,432 - chat_fa43cbe0-2e7d-4cc4-b28e-ad7e54af2667 - INFO - Tool Call: find_attributes
+2025-06-02 13:07:00,432 - chat_fa43cbe0-2e7d-4cc4-b28e-ad7e54af2667 - INFO - Arguments: {
+  "kw1": "dash",
+  "kw2": "cooldown",
+  "kw3": "speed",
+  "search_abilities": true
+}
+2025-06-02 13:07:00,636 - chat_fa43cbe0-2e7d-4cc4-b28e-ad7e54af2667 - INFO - Result: [
+  {
+    "BID": "BA108",
+    "Name": "Super Jump",
+    "Description": "Temporarily boosts jump height.",
+    "Variables": {
+      "jumpBoost": 2.5,
+      "duration": 2
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA107",
+    "Name": "Time Slow",
+    "Description": "Slows time for everything but the player.",
+    "Variables": {
+      "duration": 3.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA100",
+    "Name": "Double Jump",
+    "Description": "Allows the player to jump a second time in mid-air.",
+    "Variables": {
+      "maxJumps": 2,
+      "cooldown": 1.5
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  }
+]
+2025-06-02 13:07:00,636 - chat_fa43cbe0-2e7d-4cc4-b28e-ad7e54af2667 - INFO - Tool Call: find_attributes
+2025-06-02 13:07:00,636 - chat_fa43cbe0-2e7d-4cc4-b28e-ad7e54af2667 - INFO - Arguments: {
+  "kw1": "teleport",
+  "kw2": "cooldown",
+  "kw3": "speed",
+  "search_abilities": true
+}
+2025-06-02 13:07:00,847 - chat_fa43cbe0-2e7d-4cc4-b28e-ad7e54af2667 - INFO - Result: [
+  {
+    "BID": "BA106",
+    "Name": "Teleport",
+    "Description": "Instantly teleports the player forward.",
+    "Variables": {
+      "range": 8.0,
+      "cooldown": 4.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA102",
+    "Name": "Dash",
+    "Description": "Quickly moves the player in a chosen direction.",
+    "Variables": {
+      "dashDistance": 7.0,
+      "cooldown": 2.0
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  },
+  {
+    "BID": "BA108",
+    "Name": "Super Jump",
+    "Description": "Temporarily boosts jump height.",
+    "Variables": {
+      "jumpBoost": 2.5,
+      "duration": 2
+    },
+    "endpoint_type": "abilities",
+    "source": "/search/abilities"
+  }
+]
