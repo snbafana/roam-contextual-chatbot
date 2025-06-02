@@ -5,7 +5,7 @@ A FastAPI-based chatbot that integrates with OpenAI's GPT-4o-mini model to provi
 # FYI:
 - I am currently streaming the chat back dynamically and passing the json as a code block in that message. I implemented a version where the json is passed directly, but this does not work with streaming, as one cannot pass the json and stream a message at the same time. 
 - The attributes in the Unity editor are not validated / verified, they are just the variables initially found. This will need to be change. For example, I pass the `category + "." + attr_name + "." + variable_name` to the Unity json editor, which may not be the exact attribute. 
-- The current search system to find inital attributes can take some time to complete, so I am currently working on optimizations here. This is because, for each input, I am dynamically generating 3 keywords for the search, and then deciding which of ALL the results is the most important. 
+- The current search system to find inital attributes can take some time to complete, so I am currently working on optimizations here. This is because, for each input, I am dynamically generating 3 keywords for the search, and then deciding which of the results is the most important. However, this can also be solved with the right optimizations. 
 
 ## Features
 
@@ -20,12 +20,13 @@ A FastAPI-based chatbot that integrates with OpenAI's GPT-4o-mini model to provi
 
 ## Prerequisites
 
-- python
+- Python 3.11 or higher
 - OpenAI API key
-- FastAPI and Uvicorn for the web server
-- uv package manager
+- uv package manager (recommended) or pip
 
 ## Installation
+
+### Using uv (Recommended)
 
 1. Clone the repository:
 ```bash
@@ -33,7 +34,7 @@ git clone https://github.com/yourusername/roam-contextual-chatbot.git
 cd roam-contextual-chatbot
 ```
 
-2. Create and activate a virtual environment using uv:
+2. Create and activate a virtual environment:
 ```bash
 uv venv
 source .venv/bin/activate  # Linux/Mac
@@ -41,9 +42,38 @@ source .venv/bin/activate  # Linux/Mac
 .venv\Scripts\activate     # Windows
 ```
 
-3. Install dependencies from the lock file:
+3. Install dependencies (choose one method):
 ```bash
-uv pip sync
+# Method 1: Install from pyproject.toml (recommended)
+uv pip install -e .
+
+# Method 2: Install from requirements.txt
+uv pip install -r requirements.txt
+```
+
+### Using pip
+
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/roam-contextual-chatbot.git
+cd roam-contextual-chatbot
+```
+
+2. Create and activate a virtual environment:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# or
+.venv\Scripts\activate     # Windows
+```
+
+3. Install dependencies (choose one method):
+```bash
+# Method 1: Install from pyproject.toml (recommended)
+pip install -e .
+
+# Method 2: Install from requirements.txt
+pip install -r requirements.txt
 ```
 
 4. Create a `.env` file in the root directory and add your OpenAI API key:
