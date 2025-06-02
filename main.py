@@ -221,7 +221,132 @@ async def send_message(chat_id: str, request: MessageRequest):
             }
             chat_sessions[chat_id].append(tool_message)
             
-            # Return the tool call results directly
+            # Add function messages with names to follow_up_messages
+            follow_up_messages = []
+            for tool_call in message.tool_calls:
+                follow_up_messages.append({
+                    "role": "function",
+                    "name": tool_call.function.name,
+                    "content": tool_call.function.arguments
+                })
+
+            # If this was a find_attributes call, analyze the results
+            if message.tool_calls and message.tool_calls[0].function.name == "find_attributes":
+                try:
+                    # Get the results from the function call
+                    results = json.loads(message.tool_calls[0].function.arguments)
+                    print(results)
+                    
+                    # Create a prompt for analyzing the results
+                    analysis_prompt = f"""Given these search results from the find_attributes function call:
+{json.dumps(results, indent=2)}
+
+Go over the top 3 results, relevant to the user's query,and explain their attributes and subvariables. Only around 5 sentences tops. Lead the user to the next step"""
+
+                    # Prepare messages including full chat history
+                    analysis_messages = [{"role": msg["role"], "content": msg["content"]} 
+                                       for msg in chat_sessions[chat_id] if msg["role"] in ["system", "user", "assistant"]]
+                    analysis_messages.append({"role": "user", "content": analysis_prompt})
+
+                    # Get the analysis
+                    analysis_response = openai.chat.completions.create(
+                        model="gpt-4o",
+                        messages=analysis_messages
+                    )
+                    
+                    analysis_content = analysis_response.choices[0].message.content
+                    
+                    # Add the analysis to the follow-up messages
+                    follow_up_messages.append({
+                        "role": "assistant",
+                        "content": analysis_content
+                    })
+                    
+                    # Return the analysis instead of tool results
+                    return MessageResponse(
+                        response=analysis_content,
+                        chat_id=chat_id
+                    )
+                except Exception as e:
+                    print(f"Error analyzing search results: {e}")
+            # If this was an edit_attribute call, show the changes
+            elif message.tool_calls and message.tool_calls[0].function.name == "edit_attribute":
+                try:
+                    # Get the results from the function call
+                    results = json.loads(message.tool_calls[0].function.arguments)
+                    
+                    # Create a prompt for showing the changes
+                    analysis_prompt = f"""Given these changes from the edit_attribute function call:
+{json.dumps(results, indent=2)}
+
+Show the Unity JSON changes in a code block and briefly explain what was modified. Keep it to 2-3 sentences."""
+
+                    # Prepare messages including full chat history
+                    analysis_messages = [{"role": msg["role"], "content": msg["content"]} 
+                                       for msg in chat_sessions[chat_id] if msg["role"] in ["system", "user", "assistant"]]
+                    analysis_messages.append({"role": "user", "content": analysis_prompt})
+
+                    # Get the analysis
+                    analysis_response = openai.chat.completions.create(
+                        model="gpt-4o",
+                        messages=analysis_messages
+                    )
+                    
+                    analysis_content = analysis_response.choices[0].message.content
+                    
+                    # Add the analysis to the follow-up messages
+                    follow_up_messages.append({
+                        "role": "assistant",
+                        "content": analysis_content
+                    })
+                    
+                    # Return the analysis instead of tool results
+                    return MessageResponse(
+                        response=analysis_content,
+                        chat_id=chat_id
+                    )
+                except Exception as e:
+                    print(f"Error analyzing edit results: {e}")
+            # If this was a create_ui call, show the UI configuration
+            elif message.tool_calls and message.tool_calls[0].function.name == "create_ui":
+                try:
+                    # Get the results from the function call
+                    results = json.loads(message.tool_calls[0].function.arguments)
+                    
+                    # Create a prompt for showing the UI configuration
+                    analysis_prompt = f"""Given this UI configuration from the create_ui function call:
+{json.dumps(results, indent=2)}
+
+Show the iOS JSON configuration in a code block and briefly describe what UI elements were created. Keep it to 2-3 sentences."""
+
+                    # Prepare messages including full chat history
+                    analysis_messages = [{"role": msg["role"], "content": msg["content"]} 
+                                       for msg in chat_sessions[chat_id] if msg["role"] in ["system", "user", "assistant"]]
+                    analysis_messages.append({"role": "user", "content": analysis_prompt})
+
+                    # Get the analysis
+                    analysis_response = openai.chat.completions.create(
+                        model="gpt-4o",
+                        messages=analysis_messages
+                    )
+                    
+                    analysis_content = analysis_response.choices[0].message.content
+                    
+                    # Add the analysis to the follow-up messages
+                    follow_up_messages.append({
+                        "role": "assistant",
+                        "content": analysis_content
+                    })
+                    
+                    # Return the analysis instead of tool results
+                    return MessageResponse(
+                        response=analysis_content,
+                        chat_id=chat_id
+                    )
+                except Exception as e:
+                    print(f"Error analyzing UI results: {e}")
+            
+            # Return the tool call results directly if not a handled tool call
             return MessageResponse(
                 response=tool_calls_str,
                 chat_id=chat_id
@@ -232,19 +357,19 @@ async def send_message(chat_id: str, request: MessageRequest):
             # Log assistant response
             if logger:
                 logger.info(f"Assistant Response: {assistant_response}")
-            
-            # Add assistant response to chat history
-            assistant_message = {
-                "role": "assistant",
-                "content": assistant_response,
-                "timestamp": datetime.now().isoformat()
-            }
-            chat_sessions[chat_id].append(assistant_message)
-            
-            return MessageResponse(
-                response=assistant_response,
-                chat_id=chat_id
-            )
+        
+        # Add assistant response to chat history
+        assistant_message = {
+            "role": "assistant",
+            "content": assistant_response,
+            "timestamp": datetime.now().isoformat()
+        }
+        chat_sessions[chat_id].append(assistant_message)
+        
+        return MessageResponse(
+            response=assistant_response,
+            chat_id=chat_id
+        )
         
     except Exception as e:
         error_msg = f"Error calling OpenAI API: {str(e)}"
@@ -362,7 +487,206 @@ async def send_message_stream(chat_id: str, request: MessageRequest):
                 }
                 chat_sessions[chat_id].append(tool_message)
                 
-                # Send completion signal with tool call results
+                # Add function messages with names to follow_up_messages
+                follow_up_messages = []
+                for call in tool_calls:
+                    follow_up_messages.append({
+                        "role": "function",
+                        "name": call["function"]["name"],
+                        "content": call["function"]["arguments"]
+                    })
+
+                # If this was a find_attributes call, analyze the results
+                if tool_calls and tool_calls[0]["function"]["name"] == "find_attributes":
+                    try:
+                        # Get the results from the function call
+                        results = json.loads(tool_calls[0]["function"]["arguments"])
+                        
+                        # Create a prompt for analyzing the results
+                        analysis_prompt = f"""Given these search results from the find_attributes function call:
+{json.dumps(results, indent=2)}
+
+Go over the top 3 results, that are LISTED, relevant to the user's query, and explain their attributes and subvariables. Only around 5 sentences tops. Lead the user to the next step"""
+
+                        # Prepare messages including full chat history
+                        analysis_messages = [{"role": msg["role"], "content": msg["content"]} 
+                                           for msg in chat_sessions[chat_id] if msg["role"] in ["system", "user", "assistant"]]
+                        analysis_messages.append({"role": "user", "content": analysis_prompt})
+
+                        # Get the analysis
+                        analysis_response = openai.chat.completions.create(
+                            model="gpt-4o",
+                            messages=analysis_messages,
+                            stream=True
+                        )
+                        
+                        analysis_content = ""
+                        for chunk in analysis_response:
+                            if chunk.choices[0].delta.content is not None:
+                                content = chunk.choices[0].delta.content
+                                analysis_content += content
+                                
+                                # Stream each chunk as JSON
+                                chunk_data = {
+                                    "content": content,
+                                    "is_complete": False,
+                                    "chat_id": chat_id
+                                }
+                                yield f"data: {json.dumps(chunk_data)}\n\n"
+                        
+                        # Add the analysis to the follow-up messages
+                        follow_up_messages.append({
+                            "role": "assistant",
+                            "content": analysis_content
+                        })
+                        
+                        # Send completion signal with analysis
+                        completion_data = {
+                            "content": "",
+                            "is_complete": True,
+                            "chat_id": chat_id,
+                            "full_response": analysis_content
+                        }
+                        yield f"data: {json.dumps(completion_data)}\n\n"
+                        
+                        # Add analysis to chat history
+                        assistant_message = {
+                            "role": "assistant",
+                            "content": analysis_content,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        chat_sessions[chat_id].append(assistant_message)
+                        return
+                    except Exception as e:
+                        print(f"Error analyzing search results: {e}")
+                # If this was an edit_attribute call, show the changes
+                elif tool_calls and tool_calls[0]["function"]["name"] == "edit_attribute":
+                    try:
+                        # Get the results from the function call
+                        results = json.loads(tool_calls[0]["function"]["arguments"])
+                        
+                        # Create a prompt for showing the changes
+                        analysis_prompt = f"""Given these changes from the edit_attribute function call:
+{json.dumps(results, indent=2)}
+
+Show the Unity JSON changes in a code block and briefly explain what was modified. Keep it to 2-3 sentences."""
+
+                        # Prepare messages including full chat history
+                        analysis_messages = [{"role": msg["role"], "content": msg["content"]} 
+                                           for msg in chat_sessions[chat_id] if msg["role"] in ["system", "user", "assistant"]]
+                        analysis_messages.append({"role": "user", "content": analysis_prompt})
+
+                        # Get the analysis
+                        analysis_response = openai.chat.completions.create(
+                            model="gpt-4o",
+                            messages=analysis_messages,
+                            stream=True
+                        )
+                        
+                        analysis_content = ""
+                        for chunk in analysis_response:
+                            if chunk.choices[0].delta.content is not None:
+                                content = chunk.choices[0].delta.content
+                                analysis_content += content
+                                
+                                # Stream each chunk as JSON
+                                chunk_data = {
+                                    "content": content,
+                                    "is_complete": False,
+                                    "chat_id": chat_id
+                                }
+                                yield f"data: {json.dumps(chunk_data)}\n\n"
+                        
+                        # Add the analysis to the follow-up messages
+                        follow_up_messages.append({
+                            "role": "assistant",
+                            "content": analysis_content
+                        })
+                        
+                        # Send completion signal with analysis
+                        completion_data = {
+                            "content": "",
+                            "is_complete": True,
+                            "chat_id": chat_id,
+                            "full_response": analysis_content
+                        }
+                        yield f"data: {json.dumps(completion_data)}\n\n"
+                        
+                        # Add analysis to chat history
+                        assistant_message = {
+                            "role": "assistant",
+                            "content": analysis_content,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        chat_sessions[chat_id].append(assistant_message)
+                        return
+                    except Exception as e:
+                        print(f"Error analyzing edit results: {e}")
+                # If this was a create_ui call, show the UI configuration
+                elif tool_calls and tool_calls[0]["function"]["name"] == "create_ui":
+                    try:
+                        # Get the results from the function call
+                        results = json.loads(tool_calls[0]["function"]["arguments"])
+                        
+                        # Create a prompt for showing the UI configuration
+                        analysis_prompt = f"""Given this UI configuration from the create_ui function call:
+{json.dumps(results, indent=2)}
+
+Show the iOS JSON configuration in a code block and briefly describe what UI elements were created. Keep it to 2-3 sentences."""
+
+                        # Prepare messages including full chat history
+                        analysis_messages = [{"role": msg["role"], "content": msg["content"]} 
+                                           for msg in chat_sessions[chat_id] if msg["role"] in ["system", "user", "assistant"]]
+                        analysis_messages.append({"role": "user", "content": analysis_prompt})
+
+                        # Get the analysis
+                        analysis_response = openai.chat.completions.create(
+                            model="gpt-4o",
+                            messages=analysis_messages,
+                            stream=True
+                        )
+                        
+                        analysis_content = ""
+                        for chunk in analysis_response:
+                            if chunk.choices[0].delta.content is not None:
+                                content = chunk.choices[0].delta.content
+                                analysis_content += content
+                                
+                                # Stream each chunk as JSON
+                                chunk_data = {
+                                    "content": content,
+                                    "is_complete": False,
+                                    "chat_id": chat_id
+                                }
+                                yield f"data: {json.dumps(chunk_data)}\n\n"
+                        
+                        # Add the analysis to the follow-up messages
+                        follow_up_messages.append({
+                            "role": "assistant",
+                            "content": analysis_content
+                        })
+                        
+                        # Send completion signal with analysis
+                        completion_data = {
+                            "content": "",
+                            "is_complete": True,
+                            "chat_id": chat_id,
+                            "full_response": analysis_content
+                        }
+                        yield f"data: {json.dumps(completion_data)}\n\n"
+                        
+                        # Add analysis to chat history
+                        assistant_message = {
+                            "role": "assistant",
+                            "content": analysis_content,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        chat_sessions[chat_id].append(assistant_message)
+                        return
+                    except Exception as e:
+                        print(f"Error analyzing UI results: {e}")
+                
+                # Send completion signal with tool call results if not a handled tool call
                 completion_data = {
                     "content": "",
                     "is_complete": True,
@@ -378,7 +702,7 @@ async def send_message_stream(chat_id: str, request: MessageRequest):
                     "timestamp": datetime.now().isoformat()
                 }
                 chat_sessions[chat_id].append(assistant_message)
-            
+
             else:
                 # Send completion signal with natural response
                 completion_data = {

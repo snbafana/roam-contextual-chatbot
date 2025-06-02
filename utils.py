@@ -10,6 +10,14 @@ import aiohttp
 from typing import Dict, List, Any, Optional, Tuple, Union
 from pydantic import BaseModel, Field
 import re
+import instructor
+from dotenv import load_dotenv
+import os
+import openai
+
+load_dotenv()
+
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 # API Configuration for game modification system
 API_BASE_URL = "http://54.177.139.63"
@@ -55,9 +63,20 @@ class ObjectiveResult(BaseModel):
     source: str = Field(default="/search/objectives", description="Source endpoint path")
 
 class SearchResult(BaseModel):
-    """Union model that can represent any search result type"""
-    result_type: str = Field(..., description="Type of result: ability, shader, behavior, or objective")
-    data: Union[AbilityResult, ShaderResult, BehaviorResult, ObjectiveResult] = Field(..., description="The actual result data")
+    """Model for a single search result with relevance information"""
+    attribute_name: str = Field(..., description="The name of the attribute")
+    id: str = Field(..., description="The result's ID (BID, ShaderID, or OID)")
+
+class SearchResults(BaseModel):
+    """Model for the top 3 search results"""
+    results: List[SearchResult] = Field(..., description="List of top 3 most relevant results", min_length=3, max_length=3)
+
+# Initialize instructor client
+openai.api_key = os.getenv("OPENAI_API_KEY")
+client = instructor.patch(openai.OpenAI())
+
+# Add cache for search results
+search_results_cache = {}
 
 # Helper functions to parse API responses into Pydantic models
 def find_attributes(kw1: str, kw2: str, kw3: str, 
@@ -86,11 +105,19 @@ async def find_attributes_async(kw1: str, kw2: str, kw3: str,
                                search_abilities: bool = False, 
                                search_shaders: bool = False, 
                                search_behaviors: bool = False, 
-                               search_objectives: bool = False) -> List[Dict[str, Any]]:
+                               search_objectives: bool = False,
+                               user_query: str = "") -> List[Dict[str, Any]]:
     """
     Async function to search all endpoints concurrently and parse to Pydantic models.
     Returns a list of dictionaries that are JSON serializable.
     """
+    # Create a cache key from the search parameters
+    cache_key = f"{kw1}_{kw2}_{kw3}_{search_abilities}_{search_shaders}_{search_behaviors}_{search_objectives}"
+    
+    # Check if we have cached results
+    if cache_key in search_results_cache:
+        return search_results_cache[cache_key]
+
     all_results = []
     
     async with aiohttp.ClientSession() as session:
@@ -213,7 +240,11 @@ async def find_attributes_async(kw1: str, kw2: str, kw3: str,
     
     # Convert back to list and sort by score
     deduplicated_results = list(unique_results.values())
-    return sorted(deduplicated_results, key=get_score, reverse=True)
+    sorted_results = sorted(deduplicated_results, key=get_score, reverse=True)
+
+    # Cache the results before returning
+    search_results_cache[cache_key] = sorted_results
+    return sorted_results  # If no user query, return all results
 
 async def edit_attribute(attribute_name: str, category: str, variable_name: str, new_value: Any, operation: str = "set") -> Dict[str, Any]:
     """
@@ -230,27 +261,19 @@ async def edit_attribute(attribute_name: str, category: str, variable_name: str,
         Dictionary with Unity JSON configuration
     """
     try:
-        # Find the attribute by searching for it
-        results = await find_attributes_async(
-            attribute_name, category, "modify",
-            search_abilities=(category == "abilities"),
-            search_shaders=(category == "shaders"),
-            search_behaviors=(category == "behaviors"), 
-            search_objectives=(category == "objectives")
-        )
-        
-        if not results:
-            return {"error": f"Attribute '{attribute_name}' not found in category '{category}'"}
-        
-        # Get the first matching result
+        # Look for the attribute in cached results
         attribute = None
-        for result in results:
-            if result.get("Name") == attribute_name or result.get("Title") == attribute_name:
-                attribute = result
+        for cache_key, results in search_results_cache.items():
+            for result in results:
+                if (result.get("Name") == attribute_name or result.get("Title") == attribute_name) and \
+                   result.get("endpoint_type") == category:
+                    attribute = result
+                    break
+            if attribute:
                 break
         
         if not attribute:
-            return {"error": f"Attribute '{attribute_name}' not found in category '{category}'"}
+            return {"error": f"Attribute '{attribute_name}' not found in category '{category}'. Please search for it first using find_attributes."}
         
         # Extract information based on attribute type
         if category == "abilities" or category == "behaviors":
@@ -306,7 +329,7 @@ async def edit_attribute(attribute_name: str, category: str, variable_name: str,
         return {
             "action_type": "modify",
             "category": category_mapped,
-            "parameters": {variable_name: final_value},
+            "parameters": {variable_name: final_value}, #need to change this to variable name and defining attribute
             "confidence": round(confidence, 2)
         }
         
@@ -452,7 +475,7 @@ FUNCTION_MAP = {
 TOOL_SCHEMAS = {
     "find_attributes": {
         "name": "find_attributes",
-        "description": "Search for game attributes using keywords and endpoint flags",
+        "description": "Search for game attributes using keywords and endpoint flags, returning top 3 most relevant results",
         "parameters": {
             "type": "object",
             "properties": {
@@ -483,9 +506,13 @@ TOOL_SCHEMAS = {
                 "search_objectives": {
                     "type": "boolean",
                     "description": "Whether to search game objectives endpoint"
+                },
+                "user_query": {
+                    "type": "string",
+                    "description": "The original user query to help rank and select the most relevant results"
                 }
             },
-            "required": ["kw1", "kw2", "kw3"]
+            "required": ["kw1", "kw2", "kw3", "user_query"]
         }
     },
     "edit_attribute": {
