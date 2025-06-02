@@ -1,7 +1,9 @@
 import gradio as gr
 import requests
 import json
-from typing import List, Tuple
+import asyncio
+import aiohttp
+from typing import List, Tuple, AsyncGenerator
 
 # API Configuration
 API_BASE_URL = "http://localhost:8000"
@@ -10,6 +12,7 @@ class ChatClient:
     def __init__(self):
         self.current_chat_id = None
         self.chat_history = []
+        self.streaming_enabled = True
     
     def create_new_chat(self):
         """Create a new chat session"""
@@ -26,7 +29,7 @@ class ChatClient:
             return f"❌ Connection error: {str(e)}"
     
     def send_message(self, message: str):
-        """Send a message to the current chat"""
+        """Send a message to the current chat (non-streaming)"""
         if not self.current_chat_id:
             return self.chat_history, "❌ Please create a new chat first!"
         
@@ -56,6 +59,71 @@ class ChatClient:
         except requests.exceptions.RequestException as e:
             error_msg = f"❌ Connection error: {str(e)}"
             return self.chat_history, error_msg
+    
+    async def send_message_stream(self, message: str):
+        """Send a message to the current chat with streaming response"""
+        if not self.current_chat_id:
+            yield self.chat_history, "❌ Please create a new chat first!"
+            return
+        
+        if not message.strip():
+            yield self.chat_history, "❌ Please enter a message!"
+            return
+        
+        # Add user message to history immediately
+        self.chat_history.append((message, ""))
+        current_response = ""
+        
+        try:
+            async with aiohttp.ClientSession() as session:
+                payload = {"message": message}
+                
+                async with session.post(
+                    f"{API_BASE_URL}/chat/{self.current_chat_id}/message/stream",
+                    json=payload
+                ) as response:
+                    
+                    if response.status != 200:
+                        error_msg = f"❌ API Error: {await response.text()}"
+                        # Update the last message with error
+                        self.chat_history[-1] = (message, error_msg)
+                        yield self.chat_history, error_msg
+                        return
+                    
+                    async for line in response.content:
+                        line = line.decode('utf-8').strip()
+                        
+                        if line.startswith('data: '):
+                            try:
+                                data = json.loads(line[6:])  # Remove 'data: ' prefix
+                                
+                                if data.get('error'):
+                                    error_msg = f"❌ Streaming Error: {data['error']}"
+                                    self.chat_history[-1] = (message, error_msg)
+                                    yield self.chat_history, error_msg
+                                    return
+                                
+                                if not data.get('is_complete', False):
+                                    # Streaming content
+                                    current_response += data.get('content', '')
+                                    # Update the last message in history
+                                    self.chat_history[-1] = (message, current_response)
+                                    yield self.chat_history, ""
+                                else:
+                                    # Stream completed
+                                    if data.get('full_response'):
+                                        current_response = data['full_response']
+                                        self.chat_history[-1] = (message, current_response)
+                                    yield self.chat_history, f"✅ Connected to chat: {self.current_chat_id}"
+                                    return
+                                    
+                            except json.JSONDecodeError:
+                                continue  # Skip malformed JSON
+                                
+        except Exception as e:
+            error_msg = f"❌ Connection error: {str(e)}"
+            self.chat_history[-1] = (message, error_msg)
+            yield self.chat_history, error_msg
     
     def get_chat_list(self):
         """Get list of all active chats"""
@@ -146,6 +214,11 @@ with gr.Blocks(css=css, title="Contextual Chatbot Client") as demo:
             with gr.Row():
                 send_btn = gr.Button("Send 📤", variant="primary")
                 clear_btn = gr.Button("Clear Chat 🗑️")
+                streaming_toggle = gr.Checkbox(
+                    label="Enable Streaming 🌊",
+                    value=True,
+                    info="Stream responses in real-time"
+                )
         
         with gr.Column(scale=1):
             # Control panel
@@ -170,13 +243,23 @@ with gr.Blocks(css=css, title="Contextual Chatbot Client") as demo:
             )
     
     # Event handlers
-    def send_message_handler(message, history):
+    async def send_message_handler(message, history, use_streaming):
         if not message.strip():
-            return history, "", "❌ Please enter a message!"
+            yield history, "", "❌ Please enter a message!"
+            return
         
-        updated_history, error = chat_client.send_message(message)
-        status_msg = error if error else f"✅ Connected to chat: {chat_client.current_chat_id}"
-        return updated_history, "", status_msg
+        chat_client.streaming_enabled = use_streaming
+        
+        if use_streaming:
+            # Use streaming
+            async for updated_history, error in chat_client.send_message_stream(message):
+                status_msg = error if error else f"✅ Streaming... Chat: {chat_client.current_chat_id}"
+                yield updated_history, "", status_msg
+        else:
+            # Use regular non-streaming
+            updated_history, error = chat_client.send_message(message)
+            status_msg = error if error else f"✅ Connected to chat: {chat_client.current_chat_id}"
+            yield updated_history, "", status_msg
     
     def create_chat_handler():
         result = chat_client.create_new_chat()
@@ -186,17 +269,27 @@ with gr.Blocks(css=css, title="Contextual Chatbot Client") as demo:
         result = chat_client.delete_current_chat()
         return [], result
     
+    def toggle_streaming(enabled):
+        chat_client.streaming_enabled = enabled
+        return f"🌊 Streaming {'enabled' if enabled else 'disabled'}"
+    
     # Wire up the events
     send_btn.click(
         send_message_handler,
-        inputs=[msg, chatbot],
+        inputs=[msg, chatbot, streaming_toggle],
         outputs=[chatbot, msg, chat_status]
     )
     
     msg.submit(
         send_message_handler,
-        inputs=[msg, chatbot],
+        inputs=[msg, chatbot, streaming_toggle],
         outputs=[chatbot, msg, chat_status]
+    )
+    
+    streaming_toggle.change(
+        toggle_streaming,
+        inputs=[streaming_toggle],
+        outputs=[chat_status]
     )
     
     create_btn.click(

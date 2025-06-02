@@ -1,4 +1,5 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from typing import Dict, List, Optional
 import uuid
@@ -6,6 +7,7 @@ import openai
 import os
 from datetime import datetime
 from dotenv import load_dotenv
+import json
 
 load_dotenv()
 
@@ -86,6 +88,88 @@ async def send_message(chat_id: str, request: MessageRequest):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error calling OpenAI API: {str(e)}")
+
+@app.post("/chat/{chat_id}/message/stream")
+async def send_message_stream(chat_id: str, request: MessageRequest):
+    """Send a message to a specific chat and get GPT-4o-mini streaming response"""
+    
+    # Check if chat exists
+    if chat_id not in chat_sessions:
+        raise HTTPException(status_code=404, detail="Chat session not found")
+    
+    # Add user message to chat history
+    user_message = {
+        "role": "user",
+        "content": request.message,
+        "timestamp": datetime.now().isoformat()
+    }
+    chat_sessions[chat_id].append(user_message)
+    
+    async def generate_stream():
+        try:
+            # Prepare messages for OpenAI API
+            messages = [{"role": msg["role"], "content": msg["content"]} 
+                       for msg in chat_sessions[chat_id] if msg["role"] in ["user", "assistant"]]
+            
+            # Call OpenAI GPT-4o-mini with streaming
+            response = openai.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                max_tokens=1000,
+                temperature=0.7,
+                stream=True
+            )
+            
+            full_response = ""
+            
+            for chunk in response:
+                if chunk.choices[0].delta.content is not None:
+                    content = chunk.choices[0].delta.content
+                    full_response += content
+                    
+                    # Send each chunk as JSON
+                    chunk_data = {
+                        "content": content,
+                        "is_complete": False,
+                        "chat_id": chat_id
+                    }
+                    yield f"data: {json.dumps(chunk_data)}\n\n"
+            
+            # Send completion signal
+            completion_data = {
+                "content": "",
+                "is_complete": True,
+                "chat_id": chat_id,
+                "full_response": full_response
+            }
+            yield f"data: {json.dumps(completion_data)}\n\n"
+            
+            # Add assistant response to chat history
+            assistant_message = {
+                "role": "assistant",
+                "content": full_response,
+                "timestamp": datetime.now().isoformat()
+            }
+            chat_sessions[chat_id].append(assistant_message)
+            
+        except Exception as e:
+            error_data = {
+                "error": str(e),
+                "is_complete": True,
+                "chat_id": chat_id
+            }
+            yield f"data: {json.dumps(error_data)}\n\n"
+    
+    return StreamingResponse(
+        generate_stream(),
+        media_type="text/plain",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Headers": "*",
+        }
+    )
 
 @app.get("/chat/{chat_id}/history")
 async def get_chat_history(chat_id: str):
