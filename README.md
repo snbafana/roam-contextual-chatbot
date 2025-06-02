@@ -30,7 +30,7 @@ A FastAPI-based chatbot that integrates with OpenAI's GPT-4o-mini model to provi
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/roam-contextual-chatbot.git
+git clone https://github.com/snbafana/roam-contextual-chatbot.git
 cd roam-contextual-chatbot
 ```
 
@@ -55,7 +55,7 @@ uv pip install -r requirements.txt
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/roam-contextual-chatbot.git
+git clone https://github.com/snbafana/roam-contextual-chatbot.git
 cd roam-contextual-chatbot
 ```
 
