@@ -86,9 +86,10 @@ async def find_attributes_async(kw1: str, kw2: str, kw3: str,
                                search_abilities: bool = False, 
                                search_shaders: bool = False, 
                                search_behaviors: bool = False, 
-                               search_objectives: bool = False) -> List[Union[AbilityResult, ShaderResult, BehaviorResult, ObjectiveResult]]:
+                               search_objectives: bool = False) -> List[Dict[str, Any]]:
     """
     Async function to search all endpoints concurrently and parse to Pydantic models.
+    Returns a list of dictionaries that are JSON serializable.
     """
     search_payload = {
         "keywords": [kw1, kw2, kw3],
@@ -131,20 +132,24 @@ async def find_attributes_async(kw1: str, kw2: str, kw3: str,
                         # Handle different response formats
                         items = data if isinstance(data, list) else data.get("results", [data])
                         
-                        # Parse directly to Pydantic models
+                        # Parse directly to Pydantic models and convert to dict
                         for item in items:
                             item["endpoint_type"] = endpoint_type
                             item["source"] = f"/search/{endpoint_type}"
                             
                             try:
                                 if endpoint_type == "abilities":
-                                    all_results.append(AbilityResult(**item))
+                                    model = AbilityResult(**item)
+                                    all_results.append(model.model_dump())
                                 elif endpoint_type == "shaders":
-                                    all_results.append(ShaderResult(**item))
+                                    model = ShaderResult(**item)
+                                    all_results.append(model.model_dump())
                                 elif endpoint_type == "behaviors":
-                                    all_results.append(BehaviorResult(**item))
+                                    model = BehaviorResult(**item)
+                                    all_results.append(model.model_dump())
                                 elif endpoint_type == "objectives":
-                                    all_results.append(ObjectiveResult(**item))
+                                    model = ObjectiveResult(**item)
+                                    all_results.append(model.model_dump())
                             except Exception as e:
                                 print(f"Error parsing {endpoint_type} result: {e}")
                     else:
@@ -154,12 +159,11 @@ async def find_attributes_async(kw1: str, kw2: str, kw3: str,
     
     # Sort by relevance if available
     def get_score(item):
-        item_dict = item.dict()
-        return item_dict.get("score", item_dict.get("relevance", item_dict.get("confidence", 0)))
+        return item.get("score", item.get("relevance", item.get("confidence", 0)))
     
     return sorted(all_results, key=get_score, reverse=True)
 
-def edit_attribute(attribute_name: str, category: str, variable_name: str, new_value: Any, operation: str = "set") -> Dict[str, Any]:
+async def edit_attribute(attribute_name: str, category: str, variable_name: str, new_value: Any, operation: str = "set") -> Dict[str, Any]:
     """
     Edit a game attribute by name and category, returning Unity JSON output.
     
@@ -175,7 +179,7 @@ def edit_attribute(attribute_name: str, category: str, variable_name: str, new_v
     """
     try:
         # Find the attribute by searching for it
-        results = find_attributes(
+        results = await find_attributes_async(
             attribute_name, category, "modify",
             search_abilities=(category == "abilities"),
             search_shaders=(category == "shaders"),
@@ -183,19 +187,13 @@ def edit_attribute(attribute_name: str, category: str, variable_name: str, new_v
             search_objectives=(category == "objectives")
         )
         
-        # Find matching attribute by name
+        if not results:
+            return {"error": f"Attribute '{attribute_name}' not found in category '{category}'"}
+        
+        # Get the first matching result
         attribute = None
         for result in results:
-            if isinstance(result, AbilityResult) and result.Name == attribute_name:
-                attribute = result
-                break
-            elif isinstance(result, ShaderResult) and result.Name == attribute_name:
-                attribute = result
-                break
-            elif isinstance(result, BehaviorResult) and result.Name == attribute_name:
-                attribute = result
-                break
-            elif isinstance(result, ObjectiveResult) and result.Title == attribute_name:
+            if result.get("Name") == attribute_name or result.get("Title") == attribute_name:
                 attribute = result
                 break
         
@@ -203,31 +201,25 @@ def edit_attribute(attribute_name: str, category: str, variable_name: str, new_v
             return {"error": f"Attribute '{attribute_name}' not found in category '{category}'"}
         
         # Extract information based on attribute type
-        if isinstance(attribute, AbilityResult):
-            attr_id = attribute.BID
-            attr_name = attribute.Name
+        if category == "abilities" or category == "behaviors":
+            attr_id = attribute.get("BID")
+            attr_name = attribute.get("Name")
             category_mapped = "gameplay"
-            variables = attribute.Variables
+            variables = attribute.get("Variables", {})
             current_value = variables.get(variable_name, 0)
-        elif isinstance(attribute, BehaviorResult):
-            attr_id = attribute.BID  
-            attr_name = attribute.Name
-            category_mapped = "asset"
-            variables = attribute.Variables
-            current_value = variables.get(variable_name, 0)
-        elif isinstance(attribute, ShaderResult):
-            attr_id = attribute.ShaderID
-            attr_name = attribute.Name
+        elif category == "shaders":
+            attr_id = attribute.get("ShaderID")
+            attr_name = attribute.get("Name")
             category_mapped = "art"
             current_value = 1.0  # Default value for shaders
-        elif isinstance(attribute, ObjectiveResult):
-            attr_id = attribute.OID
-            attr_name = attribute.Title
+        elif category == "objectives":
+            attr_id = attribute.get("OID")
+            attr_name = attribute.get("Title")
             category_mapped = "gameplay"
-            win_condition = attribute.WinCondition
+            win_condition = attribute.get("WinCondition", {})
             current_value = win_condition.get(variable_name, 0)
         else:
-            return {"error": f"Unknown attribute type: {type(attribute)}"}
+            return {"error": f"Unknown category: {category}"}
         
         # Calculate new value based on operation
         if operation == "set":
@@ -260,12 +252,10 @@ def edit_attribute(attribute_name: str, category: str, variable_name: str, new_v
         
         # Generate the Unity JSON format
         return {
-            "action_type": action_type,
+            "action_type": "modify",
             "category": category_mapped,
             "parameters": {variable_name: final_value},
-            "confidence": round(confidence, 2),
-            "attribute_id": attr_id,
-            "attribute_name": attr_name
+            "confidence": round(confidence, 2)
         }
         
     except Exception as e:
@@ -275,130 +265,284 @@ def edit_attribute(attribute_name: str, category: str, variable_name: str, new_v
             "category": category
         }
 
-def create_ui(attribute_names: List[str], categories: List[str], layout: str = "vertical") -> Dict[str, Any]:
+async def create_ui(attribute_names: List[str], categories: List[str], layout: str = "vertical") -> Dict[str, Any]:
     """
-    Create UI configuration for multiple attributes by name and category.
+    Create a single UI element for the first attribute.
     
     Args:
-        attribute_names: List of attribute names to create UI for
-        categories: List of corresponding categories for each attribute
-        layout: UI layout type ("vertical", "horizontal", "grid")
+        attribute_names: List of attribute names (only first one is used)
+        categories: List of corresponding categories (only first one is used)
+        layout: UI layout type (not used in simplified version)
     
     Returns:
-        iOS UI configuration
+        Single UI element configuration:
+        {
+            "ui_type": "slider|toggle|dropdown",
+            "parameter": "parameter_name",
+            "label": "Display Name",
+            "min": 0, "max": 100, "current": 50
+        }
     """
-    ui_elements = []
+    if not attribute_names or not categories:
+        return {
+            "ui_type": "slider",
+            "parameter": "default",
+            "label": "Default Parameter",
+            "min": 0,
+            "max": 100,
+            "current": 50
+        }
     
-    for attr_name, category in zip(attribute_names, categories):
-        try:
-            # Find the attribute by searching for it
-            results = find_attributes(
-                attr_name, category, "ui",
-                search_abilities=(category == "abilities"),
-                search_shaders=(category == "shaders"),
-                search_behaviors=(category == "behaviors"),
-                search_objectives=(category == "objectives")
-            )
-            
-            # Find matching attribute by name
-            attribute = None
-            for result in results:
-                if isinstance(result, AbilityResult) and result.Name == attr_name:
-                    attribute = result
-                    break
-                elif isinstance(result, ShaderResult) and result.Name == attr_name:
-                    attribute = result
-                    break
-                elif isinstance(result, BehaviorResult) and result.Name == attr_name:
-                    attribute = result
-                    break
-                elif isinstance(result, ObjectiveResult) and result.Title == attr_name:
-                    attribute = result
-                    break
-            
-            if not attribute:
-                print(f"Warning: Attribute '{attr_name}' not found in category '{category}'")
-                continue
-            
-            # Create UI elements based on attribute type
-            if isinstance(attribute, (AbilityResult, BehaviorResult)):
-                # For abilities and behaviors, create sliders for each variable
-                variables = attribute.Variables
-                for var_name, var_value in variables.items():
-                    ui_element = {
-                        "ui_type": "slider",
-                        "parameter": var_name,
-                        "label": f"{attribute.Name} - {var_name}",
-                        "min": 0,
-                        "max": 100 if var_name != "cooldown" else 30,
-                        "current": var_value
-                    }
-                    ui_elements.append(ui_element)
-                    
-            elif isinstance(attribute, ShaderResult):
-                # For shaders, create color pickers and style dropdown
-                ui_elements.append({
-                    "ui_type": "dropdown",
-                    "parameter": "style",
-                    "label": f"{attribute.Name} - Style",
-                    "options": ["Emissive", "Rough", "Specular", "Metallic"],
-                    "current": attribute.Style
-                })
+    attr_name = attribute_names[0]
+    category = categories[0]
+    
+    try:
+        # Find the attribute by searching for it
+        results = await find_attributes_async(
+            attr_name, category, "ui",
+            search_abilities=(category == "abilities"),
+            search_shaders=(category == "shaders"),
+            search_behaviors=(category == "behaviors"),
+            search_objectives=(category == "objectives")
+        )
+        
+        if not results:
+            return {
+                "ui_type": "slider",
+                "parameter": attr_name,
+                "label": f"{attr_name} (Not Found)",
+                "min": 0,
+                "max": 100,
+                "current": 50
+            }
+        
+        # Get the first result
+        attribute = results[0]
+        
+        # Create UI element based on attribute type
+        if category == "abilities" or category == "behaviors":
+            # For abilities and behaviors, create a slider for the first variable
+            variables = attribute.get("Variables", {})
+            if variables:
+                var_name = list(variables.keys())[0]
+                var_value = variables[var_name]
+                return {
+                    "ui_type": "slider",
+                    "parameter": var_name,
+                    "label": f"{attribute.get('Name', attr_name)} - {var_name}",
+                    "min": 0,
+                    "max": 100,
+                    "current": var_value
+                }
                 
-                # Add color palette selector
-                for i, color in enumerate(attribute.ColorPalette):
-                    ui_elements.append({
-                        "ui_type": "color_picker", 
-                        "parameter": f"color_{i}",
-                        "label": f"{attribute.Name} - Color {i+1}",
-                        "current": color
-                    })
+        elif category == "shaders":
+            # For shaders, create a dropdown for style
+            return {
+                "ui_type": "dropdown",
+                "parameter": "style",
+                "label": f"{attribute.get('Name', attr_name)} - Style",
+                "options": ["Emissive", "Rough", "Specular", "Metallic"],
+                "current": attribute.get("Style", "Emissive")
+            }
+            
+        elif category == "objectives":
+            # For objectives, create a toggle for the first win condition
+            win_condition = attribute.get("WinCondition", {})
+            if win_condition:
+                condition_name = list(win_condition.keys())[0]
+                condition_value = win_condition[condition_name]
+                if isinstance(condition_value, bool):
+                    return {
+                        "ui_type": "toggle",
+                        "parameter": condition_name,
+                        "label": f"{attribute.get('Title', attr_name)} - {condition_name}",
+                        "current": condition_value
+                    }
+                else:
+                    return {
+                        "ui_type": "slider",
+                        "parameter": condition_name,
+                        "label": f"{attribute.get('Title', attr_name)} - {condition_name}",
+                        "min": 0,
+                        "max": 100,
+                        "current": condition_value
+                    }
+        
+        # Default case
+        return {
+            "ui_type": "slider",
+            "parameter": attr_name,
+            "label": f"{attr_name} (Default)",
+            "min": 0,
+            "max": 100,
+            "current": 50
+        }
                     
-            elif isinstance(attribute, ObjectiveResult):
-                # For objectives, create controls for win conditions
-                win_condition = attribute.WinCondition
-                for condition_name, condition_value in win_condition.items():
-                    if isinstance(condition_value, bool):
-                        ui_type = "toggle"
-                        ui_element = {
-                            "ui_type": ui_type,
-                            "parameter": condition_name,
-                            "label": f"{attribute.Title} - {condition_name}",
-                            "current": condition_value
-                        }
-                    else:
-                        ui_type = "slider"
-                        ui_element = {
-                            "ui_type": ui_type,
-                            "parameter": condition_name,
-                            "label": f"{attribute.Title} - {condition_name}",
-                            "min": 0,
-                            "max": 100,
-                            "current": condition_value
-                        }
-                    ui_elements.append(ui_element)
-                    
-        except Exception as e:
-            print(f"Error processing attribute '{attr_name}' in category '{category}': {e}")
-    
-    return {
-        "layout": layout,
-        "elements": ui_elements,
-        "total_elements": len(ui_elements),
-        "suggested_layout": "grid" if len(ui_elements) > 4 else "vertical"
-    }
+    except Exception as e:
+        print(f"Error creating UI for '{attr_name}' in category '{category}': {e}")
+        return {
+            "ui_type": "slider",
+            "parameter": attr_name,
+            "label": f"{attr_name} (Error)",
+            "min": 0,
+            "max": 100,
+            "current": 50
+        }
 
-# Template prompt for the AI agent
+# Function mapping table
+FUNCTION_MAP = {
+    "find_attributes": find_attributes_async,
+    "edit_attribute": edit_attribute,
+    "create_ui": create_ui
+}
+
+# OpenAI Tool Schemas
+TOOL_SCHEMAS = {
+    "find_attributes": {
+        "name": "find_attributes",
+        "description": "Search for game attributes using keywords and endpoint flags",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "kw1": {
+                    "type": "string",
+                    "description": "First keyword representing user intent. Can be different from the user's query."
+                },
+                "kw2": {
+                    "type": "string",
+                    "description": "Second keyword representing user intent. Differnt from kw1, different from user's query."
+                },
+                "kw3": {
+                    "type": "string",
+                    "description": "Third keyword representing user intent. Differnt from kw1, kw2, different from user's query."
+                },
+                "search_abilities": {
+                    "type": "boolean",
+                    "description": "Whether to search player abilities endpoint"
+                },
+                "search_shaders": {
+                    "type": "boolean",
+                    "description": "Whether to search visual effects endpoint"
+                },
+                "search_behaviors": {
+                    "type": "boolean",
+                    "description": "Whether to search asset behaviors endpoint"
+                },
+                "search_objectives": {
+                    "type": "boolean",
+                    "description": "Whether to search game objectives endpoint"
+                }
+            },
+            "required": ["kw1", "kw2", "kw3"]
+        }
+    },
+    "edit_attribute": {
+        "name": "edit_attribute",
+        "description": "Edit a game attribute by name and category",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "attribute_name": {
+                    "type": "string",
+                    "description": "Name of the attribute to modify"
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Category/endpoint type (abilities, shaders, behaviors, objectives)",
+                    "enum": ["abilities", "shaders", "behaviors", "objectives"]
+                },
+                "variable_name": {
+                    "type": "string",
+                    "description": "Name of the variable to modify"
+                },
+                "new_value": {
+                    "type": "number",
+                    "description": "New value to set"
+                },
+                "operation": {
+                    "type": "string",
+                    "description": "Operation type to apply to the current value",
+                    "enum": ["set", "increase", "decrease", "multiply"],
+                    "default": "set"
+                }
+            },
+            "required": ["attribute_name", "category", "variable_name", "new_value"]
+        }
+    },
+    "create_ui": {
+        "name": "create_ui",
+        "description": "Create UI configuration for multiple attributes",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "attribute_names": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "description": "List of attribute names to create UI for"
+                },
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": ["abilities", "shaders", "behaviors", "objectives"]
+                    },
+                    "description": "List of corresponding categories for each attribute"
+                },
+                "layout": {
+                    "type": "string",
+                    "description": "UI layout type",
+                    "enum": ["vertical", "horizontal", "grid"],
+                    "default": "vertical"
+                }
+            },
+            "required": ["attribute_names", "categories"]
+        }
+    }
+}
+
+# Updated template prompt for the AI agent
 TEMPLATE_PROMPT = """
 You are an intelligent game modification assistant that helps users modify game parameters through natural language commands.
+
+## Available Tools:
+
+1. **find_attributes(kw1, kw2, kw3, search_abilities, search_shaders, search_behaviors, search_objectives)**
+   - Search for game attributes using keywords and endpoint flags
+   - Create keywords based on user's query, that are helpful and varied for semantic search, not specifically the user's query
+   - Returns list of matching attributes with their details
+   - After finding attributes, ALWAYS show the user:
+     * All found attributes and their current values
+     * For abilities/behaviors: Show all variables and their current values, with exact names
+     * For shaders: Show style, colors, and current settings, with exact names
+     * For objectives: Show win conditions and current values, with exact names
+
+2. **edit_attribute(attribute_name, category, variable_name, new_value, operation)**
+   - Edit a game attribute by name and category
+   - Returns Unity JSON configuration for the change
+   - After editing, ALWAYS show:
+     * The Unity JSON output showing what was changed
+     * The before and after values
+     * A natural language explanation of the change
+
+3. **create_ui(attribute_names, categories, layout)**
+   - Create UI configuration for multiple attributes
+   - Returns iOS UI configuration
+   - After creating UI, ALWAYS show:
+     * The iOS JSON configuration
+     * A description of what UI elements were created
+     * How to interact with the UI elements
 
 ## Your Workflow:
 
 1. **Parse User Intent**: Extract 3 distinct keywords and determine which endpoints to search
 2. **Find Relevant Attributes**: Use find_attributes() with extracted keywords and endpoint flags
-3. **Apply Modifications**: Use edit_attribute() to make precise changes
-4. **Generate UI**: Use create_ui() to create interface configurations
-5. **Provide Context**: Explain changes in natural language
+3. **Show Attributes**: Display all found attributes and their current values
+4. **Apply Modifications**: Use edit_attribute() to make precise changes
+5. **Show Changes**: Display the Unity JSON and explain the changes
+6. **Generate UI**: Use create_ui() to create interface configurations
+7. **Show UI**: Display the iOS JSON and explain the UI elements
 
 ## Intent Classification Guidelines:
 
@@ -436,41 +580,56 @@ Choose which endpoints to search based on user intent:
 - Multipliers: 2x for "double", 1.5x for "boost", 0.5x for "half"
 - Health/Damage: +10-25 for small increases, +50-100 for major
 
-### Clarifying Questions:
-If user intent is unclear, ask questions like:
-- "Are you looking to modify player abilities, visual effects, behaviors, or game objectives?"
-- "Do you want to change character attributes, environmental visuals, or game mechanics?"
-- "Are you referring to player actions, visual appearance, or game rules?"
-
 ### Response Format:
 Always provide:
-1. Confirmation of what was changed
-2. Unity JSON for game engine
-3. iOS JSON for UI controls  
-4. Natural language explanation
+1. For find_attributes:
+   ```
+   Found Attributes:
+   - [Attribute Name]:
+     * Current Values: [list all variables and values]
+     * Description: [attribute description]
+   ```
+
+2. For edit_attribute:
+   ```
+   Changes Made:
+   - Before: [old values]
+   - After: [new values]
+   - Unity JSON: [show the JSON]
+   ```
+
+3. For create_ui:
+   ```
+   UI Configuration:
+   - Elements: [list created elements]
+   - iOS JSON: [show the JSON]
+   - Usage: [how to use the UI]
+   ```
 
 ## Example Interactions:
 
 **User**: "make the player faster"
-- Keywords: ["player", "speed", "faster"] 
-- Endpoints: search_abilities=True
-- Response: Enhanced player movement speed
+1. Call find_attributes("player", "speed", "faster", True, False, False, False)
+2. Show all found attributes and their current values
+3. From results, call edit_attribute("Sprint", "abilities", "speed", 15, "increase")
+4. Show the Unity JSON and explain the change
+5. Call create_ui(["Sprint"], ["abilities"])
+6. Show the iOS JSON and explain the UI
 
 **User**: "darker lighting"  
-- Keywords: ["lighting", "dark", "visual"]
-- Endpoints: search_shaders=True
-- Response: Reduced lighting intensity
-
-**User**: "improve enemy AI"
-- Keywords: ["enemy", "ai", "behavior"] 
-- Endpoints: search_behaviors=True
-- Response: Enhanced AI decision making
+1. Call find_attributes("lighting", "dark", "visual", False, True, False, False)
+2. Show all found shaders and their current settings
+3. From results, call edit_attribute("Ambient Light", "shaders", "intensity", 0.5, "multiply")
+4. Show the Unity JSON and explain the change
+5. Call create_ui(["Ambient Light"], ["shaders"])
+6. Show the iOS JSON and explain the UI
 
 ## Current Context:
 - You have access to real-time game attribute APIs
 - All changes generate both Unity (game engine) and iOS (UI) configurations
 - Always explain changes in friendly, conversational tone
 - If unsure about intent, ask clarifying questions rather than guessing
+- ALWAYS show attribute values and JSON outputs for transparency
 
 Be helpful, precise, and maintain game balance while fulfilling user requests.
 """
