@@ -1,19 +1,20 @@
 """
 Utils for contextual game modification system
-Handles semantic search, parameter modification, and UI generation
+Handles semantic search, parameter modification, and UI generation using OpenAI Agents
 """
 
 import json
 import requests
 import asyncio
 import aiohttp
-from typing import Dict, List, Any, Optional, Tuple, Union
+from typing import Dict, List, Any, Optional, Tuple, Union, TypedDict
 from pydantic import BaseModel, Field
 import re
 import instructor
 from dotenv import load_dotenv
 import os
 import openai
+from agents import Agent, Runner, function_tool, RunContextWrapper
 
 load_dotenv()
 
@@ -78,29 +79,7 @@ client = instructor.patch(openai.OpenAI())
 # Add cache for search results
 search_results_cache = {}
 
-# Helper functions to parse API responses into Pydantic models
-def find_attributes(kw1: str, kw2: str, kw3: str, 
-                   search_abilities: bool = False, 
-                   search_shaders: bool = False, 
-                   search_behaviors: bool = False, 
-                   search_objectives: bool = False) -> List[Union[AbilityResult, ShaderResult, BehaviorResult, ObjectiveResult]]:
-    """
-    Sync wrapper to find relevant game attributes using semantic search.
-    
-    Args:
-        kw1: First keyword representing user intent
-        kw2: Second keyword representing user intent  
-        kw3: Third keyword representing user intent
-        search_abilities: Whether to search player abilities endpoint
-        search_shaders: Whether to search visual effects endpoint
-        search_behaviors: Whether to search asset behaviors endpoint
-        search_objectives: Whether to search game objectives endpoint
-    
-    Returns:
-        List of relevant Pydantic model instances from API responses
-    """
-    return asyncio.run(find_attributes_async(kw1, kw2, kw3, search_abilities, search_shaders, search_behaviors, search_objectives))
-
+# Original implementation functions
 async def find_attributes_async(kw1: str, kw2: str, kw3: str, 
                                search_abilities: bool = False, 
                                search_shaders: bool = False, 
@@ -244,21 +223,11 @@ async def find_attributes_async(kw1: str, kw2: str, kw3: str,
 
     # Cache the results before returning
     search_results_cache[cache_key] = sorted_results
-    return sorted_results  # If no user query, return all results
+    return sorted_results
 
-async def edit_attribute(attribute_name: str, category: str, variable_name: str, new_value: Any, operation: str = "set") -> Dict[str, Any]:
+async def edit_attribute_impl(attribute_name: str, category: str, variable_name: str, new_value: Any, operation: str = "set") -> Dict[str, Any]:
     """
     Edit a game attribute by name and category, returning Unity JSON output.
-    
-    Args:
-        attribute_name: Name of the attribute to modify
-        category: Category/endpoint type (abilities, shaders, behaviors, objectives)
-        variable_name: Name of the variable to modify (for abilities/behaviors) or attribute to modify
-        new_value: New value to set
-        operation: Operation type ("set", "increase", "decrease", "multiply")
-    
-    Returns:
-        Dictionary with Unity JSON configuration
     """
     try:
         # Look for the attribute in cached results
@@ -329,7 +298,7 @@ async def edit_attribute(attribute_name: str, category: str, variable_name: str,
         return {
             "action_type": "modify",
             "category": category_mapped,
-            "parameters": {category + "." + attr_name + "." + variable_name: final_value}, #need to change this to variable name and defining attribute
+            "parameters": {category + "." + attr_name + "." + variable_name: final_value},
             "confidence": round(confidence, 2)
         }
         
@@ -340,23 +309,9 @@ async def edit_attribute(attribute_name: str, category: str, variable_name: str,
             "category": category
         }
 
-async def create_ui(attribute_names: List[str], categories: List[str], layout: str = "vertical") -> Dict[str, Any]:
+async def create_ui_impl(attribute_names: List[str], categories: List[str], layout: str = "vertical") -> Dict[str, Any]:
     """
     Create a single UI element for the first attribute.
-    
-    Args:
-        attribute_names: List of attribute names (only first one is used)
-        categories: List of corresponding categories (only first one is used)
-        layout: UI layout type (not used in simplified version)
-    
-    Returns:
-        Single UI element configuration:
-        {
-            "ui_type": "slider|toggle|dropdown",
-            "parameter": "parameter_name",
-            "label": "Display Name",
-            "min": 0, "max": 100, "current": 50
-        }
     """
     if not attribute_names or not categories:
         return {
@@ -464,127 +419,118 @@ async def create_ui(attribute_names: List[str], categories: List[str], layout: s
             "current": 50
         }
 
-# Function mapping table
+# Function-based tools using the OpenAI Agents SDK
+@function_tool
+async def find_attributes(
+    ctx: RunContextWrapper[Any],
+    kw1: str,
+    kw2: str,
+    kw3: str,
+    search_abilities: bool = False,
+    search_shaders: bool = False,
+    search_behaviors: bool = False,
+    search_objectives: bool = False,
+    user_query: str = ""
+) -> List[Dict[str, Any]]:
+    """Search for game attributes using keywords and endpoint flags.
+    
+    Args:
+        kw1: First searchable keyword (e.g., 'teleport', 'speed', 'fireball'). Avoid generic terms like 'increase' or 'cooldown'.
+        kw2: Second searchable keyword (e.g., 'dash', 'jump', 'shield'). Must be different from kw1 and kw3.
+        kw3: Third searchable keyword (e.g., 'blast', 'heal', 'stun'). Must be different from kw1 and kw2.
+        search_abilities: Whether to search player abilities endpoint
+        search_shaders: Whether to search visual effects endpoint
+        search_behaviors: Whether to search asset behaviors endpoint
+        search_objectives: Whether to search game objectives endpoint
+        user_query: The original user query to help rank and select the most relevant results
+    """
+    return await find_attributes_async(kw1, kw2, kw3, search_abilities, search_shaders, search_behaviors, search_objectives, user_query)
+
+@function_tool
+async def edit_attribute(
+    ctx: RunContextWrapper[Any],
+    attribute_name: str,
+    category: str,
+    variable_name: str,
+    new_value: Union[float, int],
+    operation: str = "set"
+) -> Dict[str, Any]:
+    """Edit a game attribute by name and category.
+    
+    Args:
+        attribute_name: Name of the attribute to modify
+        category: Category/endpoint type (abilities, shaders, behaviors, objectives)
+        variable_name: Name of the variable to modify
+        new_value: New value to set
+        operation: Operation type to apply to the current value (set, increase, decrease, multiply)
+    """
+    return await edit_attribute_impl(attribute_name, category, variable_name, new_value, operation)
+
+@function_tool
+async def create_ui(
+    ctx: RunContextWrapper[Any],
+    attribute_names: List[str],
+    categories: List[str],
+    layout: str = "vertical"
+) -> Dict[str, Any]:
+    """Create UI configuration for multiple attributes.
+    
+    Args:
+        attribute_names: List of attribute names to create UI for
+        categories: List of corresponding categories for each attribute
+        layout: UI layout type (vertical, horizontal, grid)
+    """
+    return await create_ui_impl(attribute_names, categories, layout)
+
+# Create the game modification agent
+def create_game_modification_agent() -> Agent:
+    """Create the main game modification agent with all tools"""
+    return Agent(
+        name="GameModificationAssistant",
+        instructions=TEMPLATE_PROMPT,
+        tools=[find_attributes, edit_attribute, create_ui],
+        model="gpt-4o",
+        allow_parallel_tool_calls=True
+    )
+
+# Function mapping table (kept for backward compatibility)
 FUNCTION_MAP = {
     "find_attributes": find_attributes_async,
-    "edit_attribute": edit_attribute,
-    "create_ui": create_ui
+    "edit_attribute": edit_attribute_impl,
+    "create_ui": create_ui_impl
 }
 
-# OpenAI Tool Schemas
+# OpenAI Tool Schemas (kept for backward compatibility)
 TOOL_SCHEMAS = {
-    "find_attributes": {
-        "name": "find_attributes",
-        "description": "Search for game attributes using keywords and endpoint flags, returning top 3 most relevant results",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "kw1": {
-                    "type": "string",
-                    "description": "First searchable keyword (e.g., 'teleport', 'speed', 'fireball'). Avoid generic terms like 'increase' or 'cooldown'."
-                },
-                "kw2": {
-                    "type": "string",
-                    "description": "Second searchable keyword (e.g., 'dash', 'jump', 'shield'). Must be different from kw1 and kw3."
-                },
-                "kw3": {
-                    "type": "string",
-                    "description": "Third searchable keyword (e.g., 'blast', 'heal', 'stun'). Must be different from kw1 and kw2."
-                },
-                "search_abilities": {
-                    "type": "boolean",
-                    "description": "Whether to search player abilities endpoint"
-                },
-                "search_shaders": {
-                    "type": "boolean",
-                    "description": "Whether to search visual effects endpoint"
-                },
-                "search_behaviors": {
-                    "type": "boolean",
-                    "description": "Whether to search asset behaviors endpoint"
-                },
-                "search_objectives": {
-                    "type": "boolean",
-                    "description": "Whether to search game objectives endpoint"
-                },
-                "user_query": {
-                    "type": "string",
-                    "description": "The original user query to help rank and select the most relevant results"
-                }
-            },
-            "required": ["kw1", "kw2", "kw3", "user_query"]
-        }
-    },
-    "edit_attribute": {
-        "name": "edit_attribute",
-        "description": "Edit a game attribute by name and category",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "attribute_name": {
-                    "type": "string",
-                    "description": "Name of the attribute to modify"
-                },
-                "category": {
-                    "type": "string",
-                    "description": "Category/endpoint type (abilities, shaders, behaviors, objectives)",
-                    "enum": ["abilities", "shaders", "behaviors", "objectives"]
-                },
-                "variable_name": {
-                    "type": "string",
-                    "description": "Name of the variable to modify"
-                },
-                "new_value": {
-                    "type": "number",
-                    "description": "New value to set"
-                },
-                "operation": {
-                    "type": "string",
-                    "description": "Operation type to apply to the current value",
-                    "enum": ["set", "increase", "decrease", "multiply"],
-                    "default": "set"
-                }
-            },
-            "required": ["attribute_name", "category", "variable_name", "new_value"]
-        }
-    },
-    "create_ui": {
-        "name": "create_ui",
-        "description": "Create UI configuration for multiple attributes",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "attribute_names": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "description": "List of attribute names to create UI for"
-                },
-                "categories": {
-                    "type": "array",
-                    "items": {
-                        "type": "string",
-                        "enum": ["abilities", "shaders", "behaviors", "objectives"]
-                    },
-                    "description": "List of corresponding categories for each attribute"
-                },
-                "layout": {
-                    "type": "string",
-                    "description": "UI layout type",
-                    "enum": ["vertical", "horizontal", "grid"],
-                    "default": "vertical"
-                }
-            },
-            "required": ["attribute_names", "categories"]
-        }
-    }
+    "find_attributes": find_attributes.schema,
+    "edit_attribute": edit_attribute.schema,
+    "create_ui": create_ui.schema
 }
 
 # Updated template prompt for the AI agent
 TEMPLATE_PROMPT = """
-You are an intelligent game modification assistant that helps users modify game parameters through natural language commands. Before you take any action, or provide the user with any information about actions they can take,
-use the tools to populate your relevant knowlege. If you do not know something, simply use tools. ONLY MAKE ONE TOOL CALL AT A TIME.
+You are an intelligent game modification assistant that helps users modify game parameters through natural language commands. Your goal is to make changes with minimal user input while ensuring accuracy. You should be action-oriented and make reasonable assumptions rather than asking questions.
+
+## Core Principles:
+1. Make changes based on minimal user input
+2. Make minimal questions to the user
+3. Always provide a GUI for any change
+4. Handle multiple changes simultaneously
+5. ALWAYS use multiple tool calls in sequence until the task is complete
+
+## Tool Call Sequence and Looping:
+1. First, ALWAYS use find_attributes to search for relevant attributes
+2. For EACH found attribute:
+   a. Use edit_attribute to make direct changes
+   b. Use create_ui to let the user make changes through a GUI
+3. If the first search doesn't find all needed attributes:
+   a. Use find_attributes again with different keywords
+   b. Continue the loop until all needed attributes are found
+4. NEVER stop after a single tool call - always complete the full sequence
+5. If a tool call fails:
+   a. Try alternative keywords or parameters
+   b. Continue the sequence with the next attribute
+   c. Report any failures but don't stop the process
 
 ## Available Tools:
 
@@ -616,59 +562,67 @@ use the tools to populate your relevant knowlege. If you do not know something, 
      * A description of what UI elements were created
      * How to interact with the UI elements
 
-## Your Workflow:
+## Workflow Guidelines:
 
-1. **Parse User Intent**: Extract 3 distinct keywords and determine which endpoints to search
-2. **Find Relevant Attributes**: Use find_attributes() with extracted keywords and endpoint flags
-3. **Show Attributes**: Display all found attributes and their current values
-4. **Apply Modifications**: Use edit_attribute() to make precise changes
-5. **Show Changes**: Display the Unity JSON and explain the changes
-6. **Generate UI**: Use create_ui() to create interface configurations
-7. **Show UI**: Display the iOS JSON and explain the UI elements
+1. **Parse User Intent**:
+   - Extract keywords from minimal user input
+   - Make reasonable assumptions about intent
+   - Example: "Make the player faster" -> assume moderate speed increase (+10)
+   - Example: "Make it darker" -> assume 50% reduction in lighting
 
-## Intent Classification Guidelines:
+2. **Search Attributes (LOOP UNTIL ALL FOUND)**:
+   - Use find_attributes with extracted keywords
+   - Search ALL relevant endpoints
+   - Show ALL found attributes and their current values
+   - If not all needed attributes found, try different keywords
 
-### Keyword Extraction:
-Extract 3 distinct, searchable keywords that capture the user's intent:
-- **Primary subject** (teleport, fireball, shield, dash)
-- **Action/attribute** (speed, damage, jump, heal)  
-- **Modifier** (blast, stun, buff, aura)
+3. **Make Changes (LOOP FOR EACH ATTRIBUTE)**:
+   - For EACH found attribute:
+     a. Make direct changes using edit_attribute
+     b. Create a GUI for user confirmation/refinement
+   - Use reasonable defaults for values
 
-DO NOT use generic terms like:
-- increase, decrease, multiply
-- cooldown, duration, range
-- faster, slower, stronger
-- boost, reduce, modify
+4. **Handle Multiple Changes**:
+   - Search for ALL relevant attributes first
+   - Group related changes together
+   - Create a single UI for all related changes
+   - Example: "Make the player faster and stronger" -> One UI with speed and strength controls
 
-### Endpoint Selection:
-Choose which endpoints to search based on user intent:
+## Smart Defaults:
+Use these defaults when specific values aren't provided:
+- Speed changes: +10 for "faster", -10 for "slower"
+- Strength/Damage: +20 for "stronger", -20 for "weaker"
+- Lighting: 0.5x for "darker", 1.5x for "brighter"
+- Health: +25 for "more health", -25 for "less health"
+- Cooldowns: 0.8x for "faster cooldown", 1.2x for "slower cooldown"
 
-**search_abilities = True** when user mentions:
-- Player actions: jump, run, attack, defend, abilities, skills
-- Character attributes: health, speed, strength, stamina
-- Player mechanics: movement, combat, interaction
+## Example Interactions:
 
-**search_shaders = True** when user mentions:
-- Visual effects: lighting, shadows, colors, brightness, darkness
-- Graphics: shaders, materials, textures, visual style
-- Environmental visuals: fog, bloom, contrast, saturation
+**User**: "make the player faster"
+1. Call find_attributes("player", "speed", "movement", True, False, False, False)
+2. Show all found attributes and their current values
+3. For EACH speed-related attribute:
+   a. Make direct changes using edit_attribute (increase speed by 10)
+   b. Create UI for speed-related attributes using create_ui
+4. If not all speed attributes found, try find_attributes again with different keywords
+5. Show the UI configuration and explain how to use it
 
-**search_behaviors = True** when user mentions:
-- Asset behaviors: AI, physics, collisions, triggers
-- Object interactions: pickup, destruction, animation
-- Game mechanics: spawning, pathfinding, state changes
+**User**: "darker lighting and more fog"
+1. Call find_attributes("lighting", "fog", "visual", False, True, False, False)
+2. Show all found shaders and their current settings
+3. For EACH lighting/fog attribute:
+   a. Make direct changes using edit_attribute (reduce lighting by 50%, increase fog by 30%)
+   b. Create UI for both lighting and fog controls using create_ui
+4. If not all visual attributes found, try find_attributes again with different keywords
+5. Show the UI configuration and explain how to use it
 
-**search_objectives = True** when user mentions:
-- Game goals: missions, quests, targets, achievements
-- Win conditions: score, time limits, completion criteria
-- Progression: levels, unlocks, checkpoints
+## When to Ask Questions:
+ONLY ask questions when:
+1. The user's request is completely ambiguous (e.g., "make it better")
+2. The request could affect game balance significantly
+3. The request requires specific values that can't be reasonably assumed
 
-### Smart Defaults:
-- Speed increases: +5-10 units for moderate, +15-20 for significant
-- Multipliers: 2x for "double", 1.5x for "boost", 0.5x for "half"
-- Health/Damage: +10-25 for small increases, +50-100 for major
-
-### Response Format:
+## Response Format:
 Always provide:
 1. For find_attributes:
    ```
@@ -694,32 +648,19 @@ Always provide:
    - Usage: [how to use the UI]
    ```
 
-## Example Interactions:
-
-**User**: "make the player faster"
-1. Call find_attributes("player", "speed", "faster", True, False, False, False)
-2. Show all found attributes and their current values
-3. From results, call edit_attribute("Sprint", "abilities", "speed", 15, "increase")
-4. Show the Unity JSON and explain the change
-5. Call create_ui(["Sprint"], ["abilities"])
-6. Show the iOS JSON and explain the UI
-
-**User**: "darker lighting"  
-1. Call find_attributes("lighting", "dark", "visual", False, True, False, False)
-2. Show all found shaders and their current settings
-3. From results, call edit_attribute("Ambient Light", "shaders", "intensity", 0.5, "multiply")
-4. Show the Unity JSON and explain the change
-5. Call create_ui(["Ambient Light"], ["shaders"])
-6. Show the iOS JSON and explain the UI
-
 ## Current Context:
 - You have access to real-time game attribute APIs
 - All changes generate both Unity (game engine) and iOS (UI) configurations
 - Always explain changes in friendly, conversational tone
-- If unsure about intent, ask clarifying questions rather than guessing
+- Make reasonable assumptions and minimal questions to the user
 - ALWAYS show attribute values and JSON outputs for transparency
+- ALWAYS provide a GUI for any change
+- Use smart defaults for unspecified values
+- ALWAYS complete the full tool call sequence for each attribute
+- NEVER stop after a single tool call
+- If a tool call fails, try alternatives and continue the sequence
 
-Be helpful, precise, and maintain game balance while fulfilling user requests.
+Be action-oriented, make reasonable assumptions, and maintain game balance while fulfilling user requests with minimal input. Remember to ALWAYS complete the full tool call sequence for each attribute and NEVER stop after a single tool call.
 """
 
 # Updated test function
