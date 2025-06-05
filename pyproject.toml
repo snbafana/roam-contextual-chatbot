@@ -11,5 +11,6 @@ dependencies = [
     "gradio>=5.32.0",
     "instructor>=1.8.3",
     "openai>=1.82.1",
+    "openai-agents>=0.0.17",
     "uvicorn>=0.34.3",
 ]
